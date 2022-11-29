@@ -1,0 +1,44 @@
+@font-face {
+    font-family: 'Nunito Sans';
+    font-style: normal;
+    font-weight: 300;
+    src: local('Nunito Sans Light'),
+         local('NunitoSans-Light'),
+         url(fonts/NunitoSans-Light.woff2) format('woff2'),
+         url(fonts/NunitoSans-Light.woff) format('woff'),
+         url(fonts/NunitoSans-Light.ttf) format('truetype');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
+}
+@font-face {
+    font-family: 'Nunito Sans';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Nunito Sans'),
+         local('NunitoSans-Regular'),
+         url(fonts/NunitoSans-Regular.woff2) format('woff2'),
+         url(fonts/NunitoSans-Regular.woff) format('woff'),
+         url(fonts/NunitoSans-Regular.ttf) format('truetype');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
+}
+@font-face {
+    font-family: 'Nunito Sans';
+    font-style: normal;
+    font-weight: 600;
+    src: local('Nunito Sans SemiBold'),
+         local('NunitoSans-SemiBold'),
+         url(fonts/NunitoSans-SemiBold.woff2) format('woff2'),
+         url(fonts/NunitoSans-SemiBold.woff) format('woff'),
+         url(fonts/NunitoSans-SemiBold.ttf) format('truetype');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
+}
+@font-face {
+    font-family: 'Nunito Sans';
+    font-style: normal;
+    font-weight: 700;
+    src: local('Nunito Sans Bold'),
+         local('NunitoSans-Bold'),
+         url(fonts/NunitoSans-Bold.woff2) format('woff2'),
+         url(fonts/NunitoSans-Bold.woff) format('woff'),
+         url(fonts/NunitoSans-Bold.ttf) format('truetype');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215;
+}
