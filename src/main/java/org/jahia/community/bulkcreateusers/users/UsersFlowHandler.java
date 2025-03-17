@@ -1,6 +1,7 @@
 package org.jahia.community.bulkcreateusers.users;
 
 import au.com.bytecode.opencsv.CSVReader;
+import java.io.FileInputStream;
 import org.jahia.community.bulkcreateusers.users.management.CsvFile;
 import org.jahia.services.content.*;
 import org.jahia.services.content.decorator.JCRSiteNode;
@@ -16,18 +17,20 @@ import org.springframework.binding.message.MessageContext;
 import javax.jcr.RepositoryException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.jahia.api.Constants;
 import org.jahia.services.content.decorator.JCRGroupNode;
 import org.jahia.services.usermanager.JahiaGroupManagerService;
 
-public class UsersFlowHandler {
+public class UsersFlowHandler implements Serializable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UsersFlowHandler.class);
+    private static final long serialVersionUID = 4640941698245660627L;
     private String siteKey;
-    private JahiaUserManagerService userManagerService;
-    private JahiaGroupManagerService groupManagerService;
+    private transient JahiaUserManagerService userManagerService;
+    private transient JahiaGroupManagerService groupManagerService;
 
     public void initRealm(RenderContext renderContext) throws RepositoryException {
         final JCRNodeWrapper mainNode = renderContext.getMainResource().getNode();
@@ -58,7 +61,7 @@ public class UsersFlowHandler {
         long timer = System.currentTimeMillis();
         boolean hasErrors = JCRTemplate.getInstance().doExecuteWithSystemSession((JCRSessionWrapper session) -> {
             boolean hasErrors1 = false;
-            try (final CSVReader csvReader = new CSVReader(new InputStreamReader(csvFile.getMultipartFile().getInputStream(), StandardCharsets.UTF_8),
+            try (final CSVReader csvReader = new CSVReader(new InputStreamReader(csvFile.getCsvFile().getInputStream(), StandardCharsets.UTF_8),
                     csvFile.getCsvSeparator().charAt(0), '"')) {
                 final String[] headerElements = csvReader.readNext();
                 final List<String> headerElementList = Arrays.asList(headerElements);
@@ -83,9 +86,14 @@ public class UsersFlowHandler {
                     final String userName = lineElementList.get(userNamePos);
                     final String password = lineElementList.get(passwordPos);
                     if (userManagerService.userExists(userName, siteKey)) {
-                        context.addMessage(new MessageBuilder().error().code(
-                                "bulk-create-users.users.bulk.errors.user.already.exists").arg(userName).build());
-                        hasErrors1 = true;
+                        final JCRUserNode jahiaUser = userManagerService.lookupUser(userName, siteKey, session);
+                        final String groupsValue = lineElementList.get(groupPos);
+                        for (String group : groupsValue.split("\\$")) {
+                            final JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, group, session);
+                            if (jahiaGroup != null) {
+                                jahiaGroup.addMember(jahiaUser);
+                            }
+                        }
                     } else if (userManagerService.isUsernameSyntaxCorrect(userName)) {
                         final JCRUserNode jahiaUser = userManagerService.createUser(userName, siteKey, password, properties, session);
                         if (jahiaUser != null) {
@@ -114,17 +122,19 @@ public class UsersFlowHandler {
                     batchLineNumber++;
                     lineNumber++;
                 }
+
                 session.save();
             } catch (IOException e) {
                 LOGGER.error(e.getMessage(), e);
             }
             return hasErrors1;
-        });
+        }
+        );
 
         if (LOGGER.isInfoEnabled()) {
             LOGGER.info(String.format("Batch user create took %s ms", System.currentTimeMillis() - timer));
         }
-        csvFile.setMultipartFile(null);
+        csvFile.setCsvFile(null);
         return !hasErrors;
     }
 
