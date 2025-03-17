@@ -25,7 +25,7 @@
   </parent>
   <groupId>org.jahia.community</groupId>
   <artifactId>bulk-create-users</artifactId>
-  <version>1.0.1</version>
+  <version>1.0.2-SNAPSHOT</version>
   <packaging>bundle</packaging>
   <name>Bulk create users</name>
   <description>Community module allowing mass creation of users with the related groups</description>
@@ -33,7 +33,7 @@
     <connection>scm:git:git@github.com:Jahia/bulk-create-users.git</connection>
     <developerConnection>scm:git:git@github.com:Jahia/bulk-create-users.git</developerConnection>
     <url>scm:git:git@github.com:Jahia/bulk-create-users.git</url>
-    <tag>1_0_1</tag>
+    <tag>HEAD</tag>
   </scm>
   <properties>
     <export-package>org.jahia.community.bulkcreateusers.users.management</export-package>
