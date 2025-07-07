@@ -1,6 +1,7 @@
 import {registry} from '@jahia/ui-extender';
 import {Person} from '@jahia/moonstone';
 import React from 'react';
+import CreateUsers from '../CreateUsers';
 
 export const registerRoutes = function () {
     registry.add('adminRoute', 'bulkCreateUsers', {
@@ -9,7 +10,7 @@ export const registerRoutes = function () {
         icon: null,
         label: 'bulk-create-users:users.label',
         isSelectable: true,
-        iframeUrl: window.contextJsParameters.contextPath + '/cms/adminframe/default/$lang/settings.bulkCreateUsersManageUsers.html'
+        render: () => <CreateUsers/>
     });
 
     registry.add('adminRoute', 'settings/bulkCreateUsers', {
@@ -18,6 +19,6 @@ export const registerRoutes = function () {
         icon: <Person/>,
         label: 'bulk-create-users:users.label',
         isSelectable: true,
-        iframeUrl: window.contextJsParameters.contextPath + '/cms/editframe/default/$lang/sites/$site-key.bulkCreateUsersManageUsers.html'
+        render: () => <CreateUsers/>
     });
 };

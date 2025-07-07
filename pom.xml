@@ -25,7 +25,7 @@
   </parent>
   <groupId>org.jahia.community</groupId>
   <artifactId>bulk-create-users</artifactId>
-  <version>1.0.2-SNAPSHOT</version>
+  <version>1.1.0-SNAPSHOT</version>
   <packaging>bundle</packaging>
   <name>Bulk create users</name>
   <description>Community module allowing mass creation of users with the related groups</description>
@@ -40,7 +40,7 @@
     <yarn.arguments>build:production</yarn.arguments>
     <jahia-module-type>system</jahia-module-type>
     <require-capability>osgi.extender;filter:="(osgi.extender=org.jahia.bundles.blueprint.extender.config)"</require-capability>
-    <jahia.plugin.version>6.10</jahia.plugin.version>
+    <jahia.plugin.version>6.12</jahia.plugin.version>
     <jahia-deploy-on-site>all</jahia-deploy-on-site>
     <jahia-depends>default</jahia-depends>
   </properties>
@@ -50,6 +50,11 @@
       <artifactId>app-shell</artifactId>
       <version>2.0.0</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>commons-fileupload</groupId>
+      <artifactId>commons-fileupload</artifactId>
+      <version>1.5</version>
     </dependency>
   </dependencies>
   <repositories>
@@ -77,6 +82,21 @@
         <groupId>org.apache.felix</groupId>
         <artifactId>maven-bundle-plugin</artifactId>
         <extensions>true</extensions>
+        <configuration>
+          <instructions>
+            <Import-Package>
+              ${jahia.plugin.projectPackageImport},
+              javax.xml.bind.annotation,
+              javax.xml.bind.annotation.adapters,
+              org.apache.commons.lang,
+              org.glassfish.jersey.server,
+              org.jahia.settings,
+              org.jahia.utils,
+              org.slf4j,
+              *
+            </Import-Package>
+          </instructions>
+        </configuration>
       </plugin>
       <plugin>
         <artifactId>maven-clean-plugin</artifactId>
@@ -127,6 +147,10 @@
           </execution>
         </executions>
       </plugin>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+        </plugin>
     </plugins>
   </build>
 </project>
