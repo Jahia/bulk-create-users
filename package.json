@@ -29,8 +29,10 @@
     }
   },
   "dependencies": {
+    "@jahia/data-helper": "^1.1.14",
     "@jahia/moonstone": "^1.5.2",
     "@jahia/ui-extender": "^1.0.3",
+    "@react-aria/focus": "^3.20.5",
     "file-loader": "^6.2.0",
     "i18next": "^19.3.2",
     "prop-types": "^15.7.2",
@@ -42,6 +44,7 @@
     "@babel/cli": "^7.6.2",
     "@babel/core": "^7.6.2",
     "@babel/plugin-proposal-class-properties": "^7.5.0",
+    "@babel/plugin-syntax-dynamic-import": "^7.8.3",
     "@babel/plugin-transform-classes": "^7.4.4",
     "@babel/plugin-transform-runtime": "^7.5.0",
     "@babel/preset-env": "^7.6.2",
@@ -66,5 +69,6 @@
     "webpack": "^5.52.0",
     "webpack-bundle-analyzer": "^4.4.2",
     "webpack-cli": "^4.8.0"
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610"
 }
