@@ -33,6 +33,9 @@ public class UsersHandler implements Serializable {
         for (int i = 0; i < headers.size(); i++) {
             String key = headers.get(i);
             if (!Constants.NODENAME.equals(key) && !JCRUserNode.J_PASSWORD.equals(key) && !"groups".equals(key)) {
+                if (i >= values.size() || values.get(i) == null || values.get(i).trim().isEmpty()) {
+                    throw new IllegalArgumentException("Empty value for " + key);
+                }
                 props.setProperty(key.trim(), values.get(i));
             }
         }
@@ -89,7 +92,13 @@ public class UsersHandler implements Serializable {
                     String user = values.get(userIdx);
                     String pass = values.get(passIdx);
                     String groups = (groupIdx >= 0 && groupIdx < values.size()) ? values.get(groupIdx) : null;
-                    Properties props = buildProperties(headerList, values);
+                    Properties props = null;
+                    try {
+                        props = buildProperties(headerList, values);
+                    } catch (IllegalArgumentException ex) {
+                        LOGGER.error("Skipping user creation due to invalid data: {}", ex.getMessage());
+                        return true;
+                    }
 
                     if (userManagerService.userExists(user, siteKey)) {
                         JCRUserNode existing = userManagerService.lookupUser(user, siteKey, session);

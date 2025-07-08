@@ -15,6 +15,7 @@ export const CreateUsers = () => {
     const [messages, setMessages] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [showRequirements, setShowRequirements] = useState(false);
+    const [inputKey, setInputKey] = useState(0);
 
     const siteKey = getSiteKey();
     const fileInputRef = React.useRef(null);
@@ -75,10 +76,7 @@ export const CreateUsers = () => {
         setCsvFile(null);
         setDelimiter(',');
         setMessages([]);
-        if (fileInputRef.current) {
-            console.log('clearing file input');
-            fileInputRef.current.value = '';
-        }
+        setInputKey(prev => prev + 1);
     };
 
     const renderMessages = () =>
@@ -108,6 +106,7 @@ export const CreateUsers = () => {
                             CSV File
                         </Typography>
                         <Input
+                            key={inputKey}
                             type="file"
                             id="csvFile"
                             name="csvFile"
