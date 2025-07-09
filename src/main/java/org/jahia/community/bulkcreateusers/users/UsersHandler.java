@@ -42,7 +42,7 @@ public class UsersHandler implements Serializable {
         return props;
     }
 
-    private void addUserToGroups(JCRUserNode user, String groups, String siteKey, JCRSessionWrapper session) throws RepositoryException {
+    private void addUserToGroups(JCRUserNode user, String groups, String siteKey, JCRSessionWrapper session) {
         if (groups == null || groups.trim().isEmpty()) return;
         for (String group : groups.split("\\$")) {
             String groupName = group.trim();
@@ -52,20 +52,20 @@ public class UsersHandler implements Serializable {
                     jahiaGroup.addMember(user);
                     LOGGER.info("Added user {} to group {}", user.getName(), groupName);
                 } else {
-                    LOGGER.warn("Group {} not found for site {}", groupName, siteKey);
+                    LOGGER.warn("Group {} not found{}", groupName, siteKey != null ? " for site " + siteKey : "");
                 }
             }
         }
     }
 
     public boolean bulkAddUser(final CsvFile csvFile, final String siteKey) throws RepositoryException {
-        if(siteKey != null) {
+        if (siteKey != null) {
             LOGGER.info("Bulk adding users for site: {}", siteKey);
         }
         long start = System.currentTimeMillis();
 
         boolean hasErrors = JCRTemplate.getInstance().doExecuteWithSystemSession(session -> {
-            try (CSVReader reader = new CSVReader(new InputStreamReader(csvFile.getCsvFile(), StandardCharsets.UTF_8), csvFile.getCsvSeparator().charAt(0), '"')) {
+            try (CSVReader reader = new CSVReader(new InputStreamReader(csvFile.getUploadedFile(), StandardCharsets.UTF_8), csvFile.getCsvSeparator().charAt(0), '"')) {
                 String[] headers = reader.readNext();
                 if (headers == null) {
                     LOGGER.error("Missing headers in CSV file");
@@ -80,46 +80,21 @@ public class UsersHandler implements Serializable {
                     return true;
                 }
 
-                String[] row;
                 int batch = 0;
                 boolean error = false;
+                String[] row;
                 while ((row = reader.readNext()) != null) {
                     if (batch++ == 100) {
                         session.save();
                         batch = 1;
                     }
-                    List<String> values = Arrays.asList(row);
-                    String user = values.get(userIdx);
-                    String pass = values.get(passIdx);
-                    String groups = (groupIdx >= 0 && groupIdx < values.size()) ? values.get(groupIdx) : null;
-                    Properties props = null;
-                    try {
-                        props = buildProperties(headerList, values);
-                    } catch (IllegalArgumentException ex) {
-                        LOGGER.error("Skipping user creation due to invalid data: {}", ex.getMessage());
-                        return true;
-                    }
-
-                    if (userManagerService.userExists(user, siteKey)) {
-                        JCRUserNode existing = userManagerService.lookupUser(user, siteKey, session);
-                        addUserToGroups(existing, groups, siteKey, session);
-                    } else if (userManagerService.isUsernameSyntaxCorrect(user)) {
-                        JCRUserNode created = userManagerService.createUser(user, siteKey, pass, props, session);
-                        if (created != null) {
-                            LOGGER.info("Created user: {}", user);
-                            addUserToGroups(created, groups, siteKey, session);
-                        } else {
-                            LOGGER.error("Failed to create user: {}", user);
-                            error = true;
-                        }
-                    } else {
-                        LOGGER.error("Invalid username syntax: {}", user);
+                    if (processUsers(row, headerList, userIdx, passIdx, groupIdx, siteKey, session)) {
                         error = true;
                     }
                 }
                 session.save();
                 return error;
-            } catch ( Exception e) {
+            } catch (Exception e) {
                 LOGGER.error("Error during bulk user creation", e);
                 return true;
             }
@@ -130,8 +105,41 @@ public class UsersHandler implements Serializable {
         } else {
             LOGGER.info("Batch user create took {} ms", System.currentTimeMillis() - start);
         }
-        csvFile.setCsvFile(null);
+        csvFile.setUploadedFile(null);
         return !hasErrors;
+    }
+
+    private boolean processUsers(String[] row, List<String> headerList, int userIdx, int passIdx, int groupIdx, String siteKey, JCRSessionWrapper session) {
+        List<String> values = Arrays.asList(row);
+        String user = values.get(userIdx);
+        String pass = values.get(passIdx);
+        String groups = (groupIdx >= 0 && groupIdx < values.size()) ? values.get(groupIdx) : null;
+        Properties props;
+        try {
+            props = buildProperties(headerList, values);
+        } catch (IllegalArgumentException ex) {
+            LOGGER.error("Skipping user creation due to invalid data: {}", ex.getMessage());
+            return true;
+        }
+
+        if (userManagerService.userExists(user, siteKey)) {
+            JCRUserNode existing = userManagerService.lookupUser(user, siteKey, session);
+            addUserToGroups(existing, groups, siteKey, session);
+            return false;
+        }
+        if (!userManagerService.isUsernameSyntaxCorrect(user)) {
+            LOGGER.error("Invalid username syntax: {}", user);
+            return true;
+        }
+        JCRUserNode created = userManagerService.createUser(user, siteKey, pass, props, session);
+        if (created != null) {
+            LOGGER.info("Created user: {}", user);
+            addUserToGroups(created, groups, siteKey, session);
+            return false;
+        } else {
+            LOGGER.error("Failed to create user: {}", user);
+            return true;
+        }
     }
 
     public CsvFile initCSVFile() {

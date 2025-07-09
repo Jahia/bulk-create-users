@@ -3,15 +3,15 @@ package org.jahia.community.bulkcreateusers.users.management;
 import java.io.InputStream;
 
 public class CsvFile {
-    private InputStream csvFile;
+    private InputStream uploadedFile;
     private String csvSeparator;
 
-    public InputStream getCsvFile() {
-        return csvFile;
+    public InputStream getUploadedFile() {
+        return uploadedFile;
     }
 
-    public void setCsvFile(InputStream csvFile) {
-        this.csvFile = csvFile;
+    public void setUploadedFile(InputStream uploadedFile) {
+        this.uploadedFile = uploadedFile;
     }
 
     public String getCsvSeparator() {

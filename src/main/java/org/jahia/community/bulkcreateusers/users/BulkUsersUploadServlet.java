@@ -37,38 +37,41 @@ public class BulkUsersUploadServlet extends HttpServlet {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
-        if (!ServletFileUpload.isMultipartContent(req)) {
-            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Not a multipart request");
-            return;
-        }
-
         try {
             String siteKey = null;
             CsvFile csvFile = new CsvFile();
             List<FileItem> items = new ServletFileUpload(new DiskFileItemFactory()).parseRequest(req);
 
-            for (FileItem item : items) {
-                if (item.isFormField()) {
-                    switch (item.getFieldName()) {
-                        case "siteKey":
-                            siteKey = item.getString().isEmpty() ? null : item.getString();
-                            break;
-                        default:
-                            csvFile.setCsvSeparator(item.getString() != null ? item.getString() : ",");
-                    }
-                } else {
-                    csvFile.setCsvFile(item.getInputStream());
-                }
-            }
+            siteKey = processFileItems(items, csvFile);
 
             boolean success = usersHandler.bulkAddUser(csvFile, siteKey);
-            resp.setStatus(success ? HttpServletResponse.SC_OK : HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"success\": " + success + ", \"message\": \"" +
-                    (success ? "Users created successfully." : "Some errors occurred during user creation.") + "\"}");
+            writeJsonResponse(resp, success);
 
         } catch (FileUploadException | RepositoryException e) {
             logger.error("Error during file upload or repository operation", e);
             resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "User creation failed");
         }
+    }
+
+    private String processFileItems(List<FileItem> items, CsvFile csvFile) throws IOException {
+        String siteKey = null;
+        for (FileItem item : items) {
+            if (item.isFormField()) {
+                if ("siteKey".equals(item.getFieldName())) {
+                    siteKey = item.getString().isEmpty() ? null : item.getString();
+                } else {
+                    csvFile.setCsvSeparator(item.getString() != null ? item.getString() : ",");
+                }
+            } else {
+                csvFile.setUploadedFile(item.getInputStream());
+            }
+        }
+        return siteKey;
+    }
+
+    private void writeJsonResponse(HttpServletResponse resp, boolean success) throws IOException {
+        resp.setStatus(success ? HttpServletResponse.SC_OK : HttpServletResponse.SC_BAD_REQUEST);
+        resp.getWriter().write("{\"success\": " + success + ", \"message\": \"" +
+                (success ? "Users created successfully." : "Some errors occurred during user creation.") + "\"}");
     }
 }
