@@ -123,9 +123,9 @@ public class UsersHandler implements Serializable {
             return true;
         }
 
-        if (userManagerService.userExists(user, siteKey)) {
-            JCRUserNode existing = userManagerService.lookupUser(user, siteKey, session);
-            addUserToGroups(existing, groups, siteKey, session);
+        JCRUserNode userNode = userManagerService.lookupUser(user, siteKey, session);
+        if (userNode != null) {
+            addUserToGroups(userNode, groups, siteKey, session);
             return false;
         }
         if (!userManagerService.isUsernameSyntaxCorrect(user)) {
