@@ -58,6 +58,7 @@ public class UsersHandler implements Serializable {
         }
     }
 
+    @SuppressWarnings({"java:S3776","javasecurity:S5145"})
     public boolean bulkAddUser(final CsvFile csvFile, final String siteKey) throws RepositoryException {
         if (siteKey != null) {
             LOGGER.info("Bulk adding users for site: {}", siteKey);

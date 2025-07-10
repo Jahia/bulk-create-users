@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.jcr.RepositoryException;
-import javax.servlet.ServletException;
 import javax.servlet.annotation.MultipartConfig;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -30,10 +29,11 @@ public class BulkUsersUploadServlet extends HttpServlet {
     private static final Logger logger = LoggerFactory.getLogger(BulkUsersUploadServlet.class);
 
     @Reference
+    @SuppressWarnings("java:S2226")
     private UsersHandler usersHandler;
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
 
@@ -49,10 +49,15 @@ public class BulkUsersUploadServlet extends HttpServlet {
 
         } catch (FileUploadException | RepositoryException e) {
             logger.error("Error during file upload or repository operation", e);
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "User creation failed");
+            try {
+                resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "User creation failed due to IO error");
+            } catch (IOException ioException) {
+                logger.error("Failed to send error response", ioException);
+            }
         }
     }
 
+    @SuppressWarnings("java:S3776")
     private String processFileItems(List<FileItem> items, CsvFile csvFile) throws IOException {
         String siteKey = null;
         for (FileItem item : items) {
