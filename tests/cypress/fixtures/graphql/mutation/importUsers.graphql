@@ -1,0 +1,9 @@
+mutation BulkCreateUsersImport($csvContent: String!, $separator: String, $siteKey: String) {
+    bulkCreateUsersImport(csvContent: $csvContent, separator: $separator, siteKey: $siteKey) {
+        success
+        createdCount
+        skippedCount
+        errorCount
+        errors
+    }
+}

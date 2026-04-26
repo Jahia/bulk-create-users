@@ -1,5 +1,54 @@
 {
   "users": {
     "label": "Bulk create users"
+  },
+  "title": "Bulk Create Users",
+  "label": {
+    "csvFile": "CSV File",
+    "delimiter": "CSV Delimiter",
+    "selected": "Selected: {{name}} ({{size}} KB)"
+  },
+  "placeholder": {
+    "delimiter": "Enter delimiter (e.g., , ; |)"
+  },
+  "button": {
+    "submit": "Submit",
+    "importing": "Importing…",
+    "cancel": "Cancel"
+  },
+  "validation": {
+    "noFile": "Please select a CSV file",
+    "notCsv": "Please select a valid CSV file",
+    "tooLarge": "File size must be less than 10MB"
+  },
+  "error": {
+    "readFile": "Could not read the file",
+    "network": "Network error: {{message}}"
+  },
+  "result": {
+    "success": "{{count}} user(s) created successfully",
+    "partial": "Import completed with {{errorCount}} error(s)",
+    "label": {
+      "created": "Created:",
+      "skipped": "Skipped (already exist):",
+      "errors": "Errors:"
+    }
+  },
+  "requirements": {
+    "show": "Show CSV Format Requirements",
+    "hide": "Hide CSV Format Requirements",
+    "required": {
+      "title": "Required Columns",
+      "body": "j:nodename, j:password, j:firstName and j:lastName"
+    },
+    "optional": {
+      "title": "Optional Column",
+      "body": "groups (separate multiple groups with"
+    },
+    "notes": {
+      "title": "Notes",
+      "headers": "First row must be column names",
+      "maxSize": "Maximum file size: 10MB"
+    }
   }
 }

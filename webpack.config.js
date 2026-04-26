@@ -1,10 +1,10 @@
 const path = require('path');
-const webpack = require('webpack');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
-const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
-const ModuleFederationPlugin = require("webpack/lib/container/ModuleFederationPlugin");
-const shared = require("./webpack.shared")
+const ModuleFederationPlugin = require('webpack/lib/container/ModuleFederationPlugin');
+const getModuleFederationConfig = require('@jahia/webpack-config/getModuleFederationConfig');
+const packageJson = require('./package.json');
 
 module.exports = (env, argv) => {
     let config = {
@@ -18,14 +18,14 @@ module.exports = (env, argv) => {
         },
         resolve: {
             mainFields: ['module', 'main'],
-            extensions: ['.mjs', '.js', '.jsx', 'json']
+            extensions: ['.mjs', '.js', '.jsx', '.json', '.scss']
         },
         module: {
             rules: [
                 {
                     test: /\.m?js$/,
                     type: 'javascript/auto'
-                },                
+                },
                 {
                     test: /\.jsx?$/,
                     include: [path.join(__dirname, 'src')],
@@ -49,19 +49,19 @@ module.exports = (env, argv) => {
                 },
                 {
                     test: /\.scss$/i,
+                    include: [path.join(__dirname, 'src')],
                     sideEffects: true,
                     use: [
                         'style-loader',
-                        // Translates CSS into CommonJS
                         {
                             loader: 'css-loader',
                             options: {
                                 modules: {
-                                    mode: 'local'
+                                    mode: 'local',
+                                    localIdentName: '[name]__[local]--[hash:base64:5]'
                                 }
                             }
                         },
-                        // Compiles Sass to CSS
                         'sass-loader'
                     ]
                 },
@@ -78,20 +78,11 @@ module.exports = (env, argv) => {
             ]
         },
         plugins: [
-            new ModuleFederationPlugin({
-                name: "bulkCreateUsers",
-                library: { type: "assign", name: "appShell.remotes.bulkCreateUsers" },
-                filename: "remoteEntry.js",
-                exposes: {
-                    './init': './src/javascript/init',
-                },
-                remotes: {
-                    '@jahia/app-shell': 'appShellRemote'
-                },
-                shared
-            }),
+            new ModuleFederationPlugin(getModuleFederationConfig(packageJson, {
+                library: {type: 'assign', name: 'appShell.remotes.bulkCreateUsers'}
+            })),
             new CleanWebpackPlugin({verbose: false}),
-            new CopyWebpackPlugin({patterns: [{from: './package.json', to: ''}]}),
+            new CopyWebpackPlugin({patterns: [{from: './package.json', to: ''}]})
         ],
         mode: 'development'
     };

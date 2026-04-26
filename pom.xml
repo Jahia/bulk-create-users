@@ -25,7 +25,7 @@
   </parent>
   <groupId>org.jahia.community</groupId>
   <artifactId>bulk-create-users</artifactId>
-  <version>1.1.1-SNAPSHOT</version>
+  <version>2.0.0-SNAPSHOT</version>
   <packaging>bundle</packaging>
   <name>Bulk create users</name>
   <description>Community module allowing mass creation of users with the related groups</description>
@@ -36,13 +36,12 @@
     <tag>HEAD</tag>
   </scm>
   <properties>
-    <export-package>org.jahia.community.bulkcreateusers.users.management</export-package>
+    <export-package>org.jahia.community.bulkcreateusers</export-package>
     <yarn.arguments>build:production</yarn.arguments>
     <jahia-module-type>system</jahia-module-type>
-    <require-capability>osgi.extender;filter:="(osgi.extender=org.jahia.bundles.blueprint.extender.config)"</require-capability>
+    <jahia-depends>default,graphql-dxm-provider</jahia-depends>
     <jahia.plugin.version>6.12</jahia.plugin.version>
     <jahia-deploy-on-site>all</jahia-deploy-on-site>
-    <jahia-depends>default</jahia-depends>
   </properties>
   <dependencies>
     <dependency>
@@ -52,9 +51,28 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>commons-fileupload</groupId>
-      <artifactId>commons-fileupload</artifactId>
-      <version>1.5</version>
+      <groupId>com.graphql-java</groupId>
+      <artifactId>graphql-java</artifactId>
+      <version>${graphql-java.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.graphql-java-kickstart</groupId>
+      <artifactId>graphql-java-servlet</artifactId>
+      <version>${graphql-java-servlet.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.graphql-java</groupId>
+      <artifactId>graphql-java-annotations</artifactId>
+      <version>${graphql-java-annotations.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jahia.modules</groupId>
+      <artifactId>graphql-dxm-provider</artifactId>
+      <version>3.4.0</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <repositories>
@@ -95,6 +113,7 @@
               org.slf4j,
               *
             </Import-Package>
+            <_dsannotations>org.jahia.community.bulkcreateusers.*</_dsannotations>
           </instructions>
         </configuration>
       </plugin>

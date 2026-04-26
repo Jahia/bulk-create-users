@@ -1,0 +1,2 @@
+- karafCommand: "log:log 'START - bulk-create-users provisioning'"
+- karafCommand: "log:log 'END - bulk-create-users provisioning'"

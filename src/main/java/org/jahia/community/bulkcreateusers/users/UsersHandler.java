@@ -1,40 +1,134 @@
 package org.jahia.community.bulkcreateusers.users;
 
 import au.com.bytecode.opencsv.CSVReader;
-import org.jahia.community.bulkcreateusers.users.management.CsvFile;
+import org.jahia.community.bulkcreateusers.graphql.BulkCreateUsersResult;
 import org.jahia.services.content.*;
-import org.jahia.services.content.decorator.JCRUserNode;
 import org.jahia.services.content.decorator.JCRGroupNode;
-import org.jahia.services.usermanager.JahiaUserManagerService;
+import org.jahia.services.content.decorator.JCRUserNode;
 import org.jahia.services.usermanager.JahiaGroupManagerService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
-
-import javax.jcr.RepositoryException;
-import java.io.InputStreamReader;
-import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.jahia.api.Constants;
 
+import javax.jcr.RepositoryException;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
+
 @Component(service = UsersHandler.class)
-public class UsersHandler implements Serializable {
+public class UsersHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UsersHandler.class);
-    private static final long serialVersionUID = 4640941698245660627L;
-    private transient JahiaUserManagerService userManagerService;
-    private transient JahiaGroupManagerService groupManagerService;
+
+    private JahiaUserManagerService userManagerService;
+    private JahiaGroupManagerService groupManagerService;
+
+    public BulkCreateUsersResult importUsers(final String csvContent, final String separator, final String siteKey) throws RepositoryException {
+        if (siteKey != null) {
+            LOGGER.info("Bulk adding users for site: {}", siteKey);
+        }
+        final long start = System.currentTimeMillis();
+        final int[] counts = {0, 0, 0}; // [created, skipped, error]
+        final List<String> errors = new ArrayList<>();
+
+        JCRTemplate.getInstance().doExecuteWithSystemSession(session -> {
+            try (CSVReader reader = new CSVReader(new StringReader(csvContent), separator.charAt(0), '"')) {
+                final String[] headers = reader.readNext();
+                if (headers == null) {
+                    LOGGER.error("Missing headers in CSV file");
+                    counts[2]++;
+                    errors.add("Missing headers in CSV file");
+                    return null;
+                }
+                final List<String> headerList = Arrays.asList(headers);
+                final int userIdx = headerList.indexOf(Constants.NODENAME);
+                final int passIdx = headerList.indexOf(JCRUserNode.J_PASSWORD);
+                final int groupIdx = headerList.indexOf("groups");
+                if (userIdx < 0 || passIdx < 0) {
+                    LOGGER.error("Invalid CSV: missing required columns j:nodename or j:password");
+                    counts[2]++;
+                    errors.add("Invalid CSV: missing required columns j:nodename or j:password");
+                    return null;
+                }
+
+                int batch = 0;
+                String[] row;
+                while ((row = reader.readNext()) != null) {
+                    if (batch++ == 100) {
+                        session.save();
+                        batch = 1;
+                    }
+                    final int result = processUser(row, headerList, userIdx, passIdx, groupIdx, siteKey, session, errors);
+                    if (result == 0) {
+                        counts[0]++;
+                    } else if (result == 1) {
+                        counts[1]++;
+                    } else {
+                        counts[2]++;
+                    }
+                }
+                session.save();
+            } catch (Exception e) {
+                LOGGER.error("Error during bulk user creation", e);
+                counts[2]++;
+                errors.add("Fatal error: " + e.getMessage());
+            }
+            return null;
+        });
+
+        LOGGER.info("Bulk user import completed in {} ms — created={}, skipped={}, errors={}", System.currentTimeMillis() - start, counts[0], counts[1], counts[2]);
+        return new BulkCreateUsersResult(counts[2] == 0, counts[0], counts[1], counts[2], errors);
+    }
+
+    private int processUser(String[] row, List<String> headerList, int userIdx, int passIdx, int groupIdx, String siteKey, JCRSessionWrapper session, List<String> errors) {
+        final List<String> values = Arrays.asList(row);
+        final String username = values.get(userIdx);
+        final String password = values.get(passIdx);
+        final String groups = (groupIdx >= 0 && groupIdx < values.size()) ? values.get(groupIdx) : null;
+
+        Properties props;
+        try {
+            props = buildProperties(headerList, values);
+        } catch (IllegalArgumentException ex) {
+            LOGGER.error("Skipping user due to invalid data: {}", ex.getMessage());
+            errors.add("Row for '" + username + "': " + ex.getMessage());
+            return -1;
+        }
+
+        final JCRUserNode existing = userManagerService.lookupUser(username, siteKey, session);
+        if (existing != null) {
+            addUserToGroups(existing, groups, siteKey, session);
+            return 1;
+        }
+        if (!userManagerService.isUsernameSyntaxCorrect(username)) {
+            LOGGER.error("Invalid username syntax: {}", username);
+            errors.add("Invalid username syntax: " + username);
+            return -1;
+        }
+        final JCRUserNode created = userManagerService.createUser(username, siteKey, password, props, session);
+        if (created != null) {
+            LOGGER.info("Created user: {}", username);
+            addUserToGroups(created, groups, siteKey, session);
+            return 0;
+        }
+        LOGGER.error("Failed to create user: {}", username);
+        errors.add("Failed to create user: " + username);
+        return -1;
+    }
 
     private Properties buildProperties(List<String> headers, List<String> values) {
-        Properties props = new Properties();
+        final Properties props = new Properties();
         for (int i = 0; i < headers.size(); i++) {
-            String key = headers.get(i);
+            final String key = headers.get(i);
             if (!Constants.NODENAME.equals(key) && !JCRUserNode.J_PASSWORD.equals(key) && !"groups".equals(key)) {
                 if (i >= values.size() || values.get(i) == null || values.get(i).trim().isEmpty()) {
-                    throw new IllegalArgumentException("Empty value for " + key);
+                    throw new IllegalArgumentException("Empty value for required column: " + key);
                 }
                 props.setProperty(key.trim(), values.get(i));
             }
@@ -43,11 +137,13 @@ public class UsersHandler implements Serializable {
     }
 
     private void addUserToGroups(JCRUserNode user, String groups, String siteKey, JCRSessionWrapper session) {
-        if (groups == null || groups.trim().isEmpty()) return;
-        for (String group : groups.split("\\$")) {
-            String groupName = group.trim();
+        if (groups == null || groups.trim().isEmpty()) {
+            return;
+        }
+        for (final String group : groups.split("\\$")) {
+            final String groupName = group.trim();
             if (!groupName.isEmpty()) {
-                JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, groupName, session);
+                final JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, groupName, session);
                 if (jahiaGroup != null) {
                     jahiaGroup.addMember(user);
                     LOGGER.info("Added user {} to group {}", user.getName(), groupName);
@@ -56,97 +152,6 @@ public class UsersHandler implements Serializable {
                 }
             }
         }
-    }
-
-    @SuppressWarnings({"java:S3776","javasecurity:S5145"})
-    public boolean bulkAddUser(final CsvFile csvFile, final String siteKey) throws RepositoryException {
-        if (siteKey != null) {
-            LOGGER.info("Bulk adding users for site: {}", siteKey);
-        }
-        long start = System.currentTimeMillis();
-
-        boolean hasErrors = JCRTemplate.getInstance().doExecuteWithSystemSession(session -> {
-            try (CSVReader reader = new CSVReader(new InputStreamReader(csvFile.getUploadedFile(), StandardCharsets.UTF_8), csvFile.getCsvSeparator().charAt(0), '"')) {
-                String[] headers = reader.readNext();
-                if (headers == null) {
-                    LOGGER.error("Missing headers in CSV file");
-                    return true;
-                }
-                List<String> headerList = Arrays.asList(headers);
-                int userIdx = headerList.indexOf(Constants.NODENAME);
-                int passIdx = headerList.indexOf(JCRUserNode.J_PASSWORD);
-                int groupIdx = headerList.indexOf("groups");
-                if (userIdx < 0 || passIdx < 0) {
-                    LOGGER.error("Invalid CSV file, incorrect required columns");
-                    return true;
-                }
-
-                int batch = 0;
-                boolean error = false;
-                String[] row;
-                while ((row = reader.readNext()) != null) {
-                    if (batch++ == 100) {
-                        session.save();
-                        batch = 1;
-                    }
-                    if (processUsers(row, headerList, userIdx, passIdx, groupIdx, siteKey, session)) {
-                        error = true;
-                    }
-                }
-                session.save();
-                return error;
-            } catch (Exception e) {
-                LOGGER.error("Error during bulk user creation", e);
-                return true;
-            }
-        });
-
-        if (hasErrors) {
-            LOGGER.error("Errors occurred during bulk user creation");
-        } else {
-            LOGGER.info("Batch user create took {} ms", System.currentTimeMillis() - start);
-        }
-        csvFile.setUploadedFile(null);
-        return !hasErrors;
-    }
-
-    private boolean processUsers(String[] row, List<String> headerList, int userIdx, int passIdx, int groupIdx, String siteKey, JCRSessionWrapper session) {
-        List<String> values = Arrays.asList(row);
-        String user = values.get(userIdx);
-        String pass = values.get(passIdx);
-        String groups = (groupIdx >= 0 && groupIdx < values.size()) ? values.get(groupIdx) : null;
-        Properties props;
-        try {
-            props = buildProperties(headerList, values);
-        } catch (IllegalArgumentException ex) {
-            LOGGER.error("Skipping user creation due to invalid data: {}", ex.getMessage());
-            return true;
-        }
-
-        JCRUserNode userNode = userManagerService.lookupUser(user, siteKey, session);
-        if (userNode != null) {
-            addUserToGroups(userNode, groups, siteKey, session);
-            return false;
-        }
-        if (!userManagerService.isUsernameSyntaxCorrect(user)) {
-            LOGGER.error("Invalid username syntax: {}", user);
-            return true;
-        }
-        JCRUserNode created = userManagerService.createUser(user, siteKey, pass, props, session);
-        if (created != null) {
-            LOGGER.info("Created user: {}", user);
-            addUserToGroups(created, groups, siteKey, session);
-            return false;
-        } else {
-            LOGGER.error("Failed to create user: {}", user);
-            return true;
-        }
-    }
-
-    public CsvFile initCSVFile() {
-        CsvFile csvFile = new CsvFile();
-        csvFile.setCsvSeparator(",");
-        return csvFile;
     }
 
     @Reference

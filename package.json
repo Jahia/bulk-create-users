@@ -1,25 +1,20 @@
 {
   "name": "@jahia/bulk-create-users",
-  "version": "1.0.0",
-  "husky": {
-    "hooks": {
-      "pre-push": "yarn lint:fix"
-    }
-  },
+  "version": "2.0.0",
   "scripts": {
-    "test": "env-cmd --no-override jest",
-    "testcli": "jest",
-    "build": "yarn lint:fix && yarn webpack",
+    "build": "yarn webpack",
+    "webpack": "webpack",
     "build:nolint": "yarn webpack",
     "dev": "yarn webpack --watch",
-    "webpack": "node --max_old_space_size=2048 ./node_modules/webpack/bin/webpack.js",
-    "build:analyze": "yarn build --analyze",
     "build:production": "yarn build --mode=production",
+    "build:analyze": "yarn build --analyze",
     "build:production-analyze": "yarn build --mode=production --analyze",
     "clean": "rimraf *.log src/main/resources/javascript/apps",
     "clean:all": "yarn clean && rimraf node_modules node",
-    "lint": "./node_modules/.bin/eslint --ext js,jsx .",
-    "lint:fix": "./node_modules/.bin/eslint --ext js,jsx --fix ."
+    "lint:js": "eslint --ext js,jsx src/javascript",
+    "lint:js:fix": "yarn lint:js --fix",
+    "lint": "yarn lint:js",
+    "lint:fix": "yarn lint:js:fix"
   },
   "main": "index.js",
   "license": "MIT",
@@ -29,13 +24,11 @@
     }
   },
   "dependencies": {
-    "@jahia/data-helper": "^1.1.14",
+    "@apollo/client": "^3.8.2",
     "@jahia/moonstone": "^1.5.2",
     "@jahia/ui-extender": "^1.0.3",
-    "@react-aria/focus": "^3.20.5",
-    "file-loader": "^6.2.0",
+    "graphql": "^15.8.0",
     "i18next": "^19.3.2",
-    "prop-types": "^15.7.2",
     "react": "^16.10.2",
     "react-dom": "^16.10.2",
     "react-i18next": "^11.2.2"
@@ -52,15 +45,13 @@
     "@babel/preset-typescript": "^7.3.3",
     "@babel/runtime": "^7.5.4",
     "@jahia/eslint-config": "^1.1.0",
-    "babel-jest": "^24.9.0",
+    "@jahia/webpack-config": "^1.1.0",
     "babel-loader": "^8.0.6",
     "clean-webpack-plugin": "^4.0.0",
     "copy-webpack-plugin": "^9.0.1",
     "css-loader": "^3.2.0",
     "eslint": "^6.8.0",
-    "eslint-loader": "^3.0.2",
-    "eslint-plugin-json": "^2.0.1",
-    "husky": "^3.0.9",
+    "file-loader": "^6.2.0",
     "node-sass": "^6.0.1",
     "path": "^0.12.7",
     "rimraf": "^3.0.0",
