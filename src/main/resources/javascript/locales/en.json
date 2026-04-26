@@ -19,7 +19,7 @@
   "validation": {
     "noFile": "Please select a CSV file",
     "notCsv": "Please select a valid CSV file",
-    "tooLarge": "File size must be less than 10MB"
+    "tooLarge": "File size must be less than {{maxSizeMb}}MB"
   },
   "error": {
     "readFile": "Could not read the file",

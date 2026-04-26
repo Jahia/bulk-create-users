@@ -1,8 +1,8 @@
 import React, {useEffect, useState} from 'react';
-import {useMutation} from '@apollo/client';
+import {useMutation, useQuery} from '@apollo/client';
 import {Button, Typography, Input, ChevronDown, ChevronUp} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
-import {BULK_CREATE_USERS_IMPORT} from './CreateUsers.gql';
+import {BULK_CREATE_USERS_IMPORT, GET_MAX_UPLOAD_SIZE} from './CreateUsers.gql';
 import styles from './createUsers.scss';
 
 const getSiteKey = () => {
@@ -10,7 +10,7 @@ const getSiteKey = () => {
     return (parts.length === 3 && parts[1] === 'settings' && parts[2] === 'bulkCreateUsers') ? parts[0] : null;
 };
 
-const MAX_SIZE = 10 * 1024 * 1024;
+const DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
 
 // Columns that must be present in every CSV row (non-negotiable)
 const REQUIRED_COLUMNS = ['j:nodename', 'j:password', 'j:firstName', 'j:lastName'];
@@ -43,6 +43,9 @@ export const CreateUsers = () => {
     const [selectedOptionalColumns, setSelectedOptionalColumns] = useState([]);
 
     const siteKey = getSiteKey();
+
+    const {data: settingsData} = useQuery(GET_MAX_UPLOAD_SIZE);
+    const maxSize = settingsData?.bulkCreateUsersMaxUploadSize ?? DEFAULT_MAX_SIZE;
 
     const [importUsers, {loading: isUploading}] = useMutation(BULK_CREATE_USERS_IMPORT);
 
@@ -134,8 +137,8 @@ export const CreateUsers = () => {
             return setCsvFile(null);
         }
 
-        if (file.size > MAX_SIZE) {
-            addMessage('error', t('validation.tooLarge'));
+        if (file.size > maxSize) {
+            addMessage('error', t('validation.tooLarge', {maxSizeMb: Math.floor(maxSize / (1024 * 1024))}));
             return setCsvFile(null);
         }
 
