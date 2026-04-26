@@ -17,6 +17,8 @@ import org.jahia.api.Constants;
 import javax.jcr.RepositoryException;
 import java.io.StringReader;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component(service = UsersHandler.class)
 public class UsersHandler {
@@ -25,6 +27,9 @@ public class UsersHandler {
 
     // Properties that must have a value in every row
     private static final Set<String> REQUIRED_PROPERTY_COLUMNS = new HashSet<>(Arrays.asList("j:firstName", "j:lastName"));
+
+    // Matches each [groupName] token in the groups cell
+    private static final Pattern GROUP_PATTERN = Pattern.compile("\\[([^\\]]+)\\]");
 
     private JahiaUserManagerService userManagerService;
     private JahiaGroupManagerService groupManagerService;
@@ -153,8 +158,9 @@ public class UsersHandler {
         if (groups == null || groups.trim().isEmpty()) {
             return;
         }
-        for (final String group : groups.split("\\$")) {
-            final String groupName = group.trim();
+        final Matcher matcher = GROUP_PATTERN.matcher(groups);
+        while (matcher.find()) {
+            final String groupName = matcher.group(1).trim();
             if (!groupName.isEmpty()) {
                 final JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, groupName, session);
                 if (jahiaGroup != null) {

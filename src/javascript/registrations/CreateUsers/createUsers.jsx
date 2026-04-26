@@ -337,7 +337,7 @@ export const CreateUsers = () => {
                                 <div>
                                     <dt className={styles.bcu_descriptionListTerm}>{t('requirements.optional.title')}</dt>
                                     <dd className={styles.bcu_descriptionListDescription}>
-                                        {t('requirements.optional.body')} <code>$</code>
+                                        {t('requirements.optional.body')}
                                     </dd>
                                 </div>
                                 <div>

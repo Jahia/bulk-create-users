@@ -1,0 +1,3 @@
+j:nodename,j:password,j:firstName,j:lastName,groups
+bcu-test-user1,TestPass1234!,Alice,Smith,[privileged]
+bcu-test-user2,TestPass1234!,Bob,Jones,[privileged],[users]

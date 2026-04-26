@@ -137,5 +137,35 @@ describe('Bulk Create Users', () => {
                     expect(result.createdCount).to.eq(1);
                 });
         });
+
+        it('accepts groups in [group1],[group2] bracket format', () => {
+            deleteTestUsers();
+            // privileged is a built-in global group that always exists
+            const csvWithGroups = 'j:nodename,j:password,j:firstName,j:lastName,groups\nbcu-test-user1,TestPass1234!,Alice,Smith,[privileged]';
+            cy.apollo({
+                mutation: importUsers,
+                variables: {csvContent: csvWithGroups, separator: ',', selectedColumns: REQUIRED_COLUMNS}
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.success).to.be.true;
+                    expect(result.createdCount).to.eq(1);
+                });
+        });
+
+        it('silently skips a group that does not exist', () => {
+            deleteTestUsers();
+            const csvWithBadGroup = 'j:nodename,j:password,j:firstName,j:lastName,groups\nbcu-test-user1,TestPass1234!,Alice,Smith,[nonexistent-group-xyz]';
+            cy.apollo({
+                mutation: importUsers,
+                variables: {csvContent: csvWithBadGroup, separator: ',', selectedColumns: REQUIRED_COLUMNS}
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    // user is created even though the group was not found
+                    expect(result.success).to.be.true;
+                    expect(result.createdCount).to.eq(1);
+                });
+        });
     });
 });

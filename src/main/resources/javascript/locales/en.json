@@ -50,7 +50,7 @@
     },
     "optional": {
       "title": "Optional Column",
-      "body": "groups (separate multiple groups with"
+      "body": "groups — group names between brackets, separated by commas: [group1],[group2]"
     },
     "notes": {
       "title": "Notes",
