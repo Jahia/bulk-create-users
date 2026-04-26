@@ -24,12 +24,14 @@ describe('Bulk Create Users — UI Column Selection', () => {
 
     describe('Column detection', () => {
         it('shows column section after selecting a valid CSV', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
             cy.get('#bcu-columns', {timeout: 5000}).should('be.visible');
         });
 
         it('shows required column checkboxes (disabled)', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
             cy.get('#bcu-col-req-j-nodename', {timeout: 5000}).should('be.disabled');
@@ -39,6 +41,7 @@ describe('Bulk Create Users — UI Column Selection', () => {
         });
 
         it('marks all required columns as checked when present', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
             cy.get('#bcu-col-req-j-nodename', {timeout: 5000}).should('be.checked');
@@ -47,18 +50,21 @@ describe('Bulk Create Users — UI Column Selection', () => {
         });
 
         it('shows optional columns for CSVs with extra columns', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users-with-email.csv', {force: true});
             cy.get('#bcu-col-opt-j-email', {timeout: 5000}).should('exist');
         });
 
         it('pre-checks all optional columns', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users-with-email.csv', {force: true});
             cy.get('#bcu-col-opt-j-email', {timeout: 5000}).should('be.checked');
         });
 
         it('allows toggling optional columns', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users-with-email.csv', {force: true});
             cy.get('#bcu-col-opt-j-email', {timeout: 5000}).uncheck();
@@ -68,6 +74,7 @@ describe('Bulk Create Users — UI Column Selection', () => {
         });
 
         it('shows missing badge and disables Submit when required columns are absent', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/missing-columns.csv', {force: true});
             cy.get('#bcu-missing-required', {timeout: 5000}).should('be.visible');
@@ -75,6 +82,7 @@ describe('Bulk Create Users — UI Column Selection', () => {
         });
 
         it('re-parses headers when delimiter is changed', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
             cy.get('#bcu-columns', {timeout: 5000}).should('be.visible');
@@ -88,6 +96,7 @@ describe('Bulk Create Users — UI Column Selection', () => {
         });
 
         it('clears column section after Cancel', () => {
+            cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('#bcu-csv-file').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
             cy.get('#bcu-columns', {timeout: 5000}).should('be.visible');
