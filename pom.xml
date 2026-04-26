@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.jahia.modules</groupId>
     <artifactId>jahia-modules</artifactId>
-    <version>8.1.7.2</version>
+    <version>8.2.1.0</version>
   </parent>
   <groupId>org.jahia.community</groupId>
   <artifactId>bulk-create-users</artifactId>
@@ -40,7 +40,6 @@
     <yarn.arguments>build:production</yarn.arguments>
     <jahia-module-type>system</jahia-module-type>
     <jahia-depends>default,graphql-dxm-provider</jahia-depends>
-    <jahia.plugin.version>6.12</jahia.plugin.version>
     <jahia-deploy-on-site>all</jahia-deploy-on-site>
   </properties>
   <dependencies>
