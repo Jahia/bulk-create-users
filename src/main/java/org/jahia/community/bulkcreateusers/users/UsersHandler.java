@@ -111,9 +111,12 @@ public class UsersHandler {
             return -1;
         }
 
+        final boolean assignGroups = groupIdx >= 0 && (allowedColumns == null || allowedColumns.contains("groups"));
         final JCRUserNode existing = userManagerService.lookupUser(username, siteKey, session);
         if (existing != null) {
-            addUserToGroups(existing, groups, siteKey, session);
+            if (assignGroups) {
+                addUserToGroups(existing, groups, siteKey, session);
+            }
             return 1;
         }
         if (!userManagerService.isUsernameSyntaxCorrect(username)) {
@@ -124,7 +127,9 @@ public class UsersHandler {
         final JCRUserNode created = userManagerService.createUser(username, siteKey, password, props, session);
         if (created != null) {
             LOGGER.info("Created user: {}", username);
-            addUserToGroups(created, groups, siteKey, session);
+            if (assignGroups) {
+                addUserToGroups(created, groups, siteKey, session);
+            }
             return 0;
         }
         LOGGER.error("Failed to create user: {}", username);

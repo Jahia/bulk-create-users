@@ -61,7 +61,7 @@ export const CreateUsers = () => {
             setCsvHeaders(headers);
             setMissingRequired(REQUIRED_COLUMNS.filter(r => !headers.includes(r)));
             // Pre-select all optional (non-reserved) columns
-            setSelectedOptionalColumns(headers.filter(h => !REQUIRED_COLUMNS.includes(h) && h !== 'groups'));
+            setSelectedOptionalColumns(headers.filter(h => !REQUIRED_COLUMNS.includes(h)));
         }).catch(() => {
             setCsvHeaders([]);
         });
@@ -165,7 +165,7 @@ export const CreateUsers = () => {
         ));
 
     const detectedRequired = csvHeaders.filter(h => REQUIRED_COLUMNS.includes(h));
-    const detectedOptional = csvHeaders.filter(h => !REQUIRED_COLUMNS.includes(h) && h !== 'groups');
+    const detectedOptional = csvHeaders.filter(h => !REQUIRED_COLUMNS.includes(h));
 
     return (
         <div className={styles.bcu_root}>
