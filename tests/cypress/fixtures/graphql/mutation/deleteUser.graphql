@@ -1,6 +1,6 @@
-mutation DeleteUser($path: String!) {
+mutation DeleteUser{
     jcr {
-        mutateNode(pathOrId: $path) {
+        mutateNodesByQuery(query:"SELECT * FROM [jnt:user] as n WHERE n.[j:nodename]<>'root' and n.[j:nodename]<>'guest'") {
             delete
         }
     }

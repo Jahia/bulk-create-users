@@ -1,7 +1,8 @@
-mutation BulkCreateUsersImport($csvContent: String!, $separator: String, $siteKey: String, $selectedColumns: [String]) {
-    bulkCreateUsersImport(csvContent: $csvContent, separator: $separator, siteKey: $siteKey, selectedColumns: $selectedColumns) {
+mutation BulkCreateUsersImport($csvContent: String!, $separator: String, $siteKey: String, $selectedColumns: [String], $overwrite: Boolean) {
+    bulkCreateUsersImport(csvContent: $csvContent, separator: $separator, siteKey: $siteKey, selectedColumns: $selectedColumns, overwrite: $overwrite) {
         success
         createdCount
+        updatedCount
         skippedCount
         errorCount
         errors

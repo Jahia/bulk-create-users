@@ -13,8 +13,8 @@ describe('Bulk Create Users', () => {
     const CSV_WITH_EMAIL = 'j:nodename,j:password,j:firstName,j:lastName,j:email\nbcu-test-user1,TestPass1234!,Alice,Smith,alice@example.com\nbcu-test-user2,TestPass1234!,Bob,Jones,bob@example.com';
 
     const deleteTestUsers = () => {
-        cy.apollo({mutation: deleteUser, variables: {path: `/users/${TEST_USER_1}`}, failOnStatusCode: false});
-        cy.apollo({mutation: deleteUser, variables: {path: `/users/${TEST_USER_2}`}, failOnStatusCode: false});
+        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
+        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
     };
 
     before(() => {
@@ -51,7 +51,7 @@ describe('Bulk Create Users', () => {
             })
                 .its('data.bulkCreateUsersImport')
                 .should(result => {
-                    expect(result).to.have.all.keys('success', 'createdCount', 'skippedCount', 'errorCount', 'errors');
+                    expect(result).to.have.all.keys('__typename', 'success', 'createdCount', 'updatedCount', 'skippedCount', 'errorCount', 'errors');
                 });
         });
 
@@ -165,6 +165,35 @@ describe('Bulk Create Users', () => {
                     // user is created even though the group was not found
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(1);
+                });
+        });
+
+        it('overwrites existing users when overwrite is true', () => {
+            // Users already exist from the previous test; re-import with overwrite=true
+            const csvUpdated = 'j:nodename,j:password,j:firstName,j:lastName\nbcu-test-user1,TestPass1234!,AliceUpdated,SmithUpdated';
+            cy.apollo({
+                mutation: importUsers,
+                variables: {csvContent: csvUpdated, separator: ',', selectedColumns: REQUIRED_COLUMNS, overwrite: true}
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.success).to.be.true;
+                    expect(result.updatedCount).to.eq(1);
+                    expect(result.createdCount).to.eq(0);
+                    expect(result.skippedCount).to.eq(0);
+                });
+        });
+
+        it('never overwrites the root user even when overwrite is true', () => {
+            const csvWithRoot = 'j:nodename,j:password,j:firstName,j:lastName\nroot,TestPass1234!,Hacked,Root';
+            cy.apollo({
+                mutation: importUsers,
+                variables: {csvContent: csvWithRoot, separator: ',', selectedColumns: REQUIRED_COLUMNS, overwrite: true}
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.updatedCount).to.eq(0);
+                    expect(result.skippedCount).to.eq(1);
                 });
         });
     });
