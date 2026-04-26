@@ -105,6 +105,64 @@
   color: #a4262c;
 }
 
+.bcu_columnsSection {
+  margin-bottom: 1.5rem;
+  max-width: 600px;
+}
+
+.bcu_missingRequired {
+  background-color: #fdecea;
+  color: #a4262c;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+
+.bcu_columnGroup {
+  margin-top: 0.8rem;
+}
+
+.bcu_columnGroupLabel {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--moonstone-color-gray80, #555);
+}
+
+.bcu_columnItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+}
+
+.bcu_columnMissing {
+  color: #a4262c;
+  opacity: 0.7;
+}
+
+.bcu_missingBadge {
+  font-size: 0.75rem;
+  color: #a4262c;
+  background-color: #fdecea;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 0.3rem;
+}
+
 .bcu_section {
   margin-top: 1.5rem;
   max-width: 600px;

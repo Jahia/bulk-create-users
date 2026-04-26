@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
+import java.util.List;
 
 @GraphQLTypeExtension(DXGraphQLProvider.Mutation.class)
 @GraphQLName("BulkCreateUsersMutations")
@@ -31,7 +32,8 @@ public class BulkCreateUsersMutationExtension {
     public static BulkCreateUsersResult importUsers(
             @GraphQLName("csvContent") @GraphQLNonNull final String csvContent,
             @GraphQLName("separator") final String separator,
-            @GraphQLName("siteKey") final String siteKey) {
+            @GraphQLName("siteKey") final String siteKey,
+            @GraphQLName("selectedColumns") final List<String> selectedColumns) {
         final UsersHandler handler = BundleUtils.getOsgiService(UsersHandler.class, null);
         if (handler == null) {
             LOGGER.error("UsersHandler service is not available");
@@ -40,7 +42,7 @@ public class BulkCreateUsersMutationExtension {
         final String sep = (separator != null && !separator.isEmpty()) ? separator : ",";
         final String site = (siteKey != null && !siteKey.isEmpty()) ? siteKey : null;
         try {
-            return handler.importUsers(csvContent, sep, site);
+            return handler.importUsers(csvContent, sep, site, selectedColumns);
         } catch (Exception e) {
             LOGGER.error("Error during bulk user import", e);
             return new BulkCreateUsersResult(false, 0, 0, 1, Collections.singletonList(e.getMessage()));

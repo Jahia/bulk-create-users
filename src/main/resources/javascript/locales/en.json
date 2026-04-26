@@ -25,6 +25,13 @@
     "readFile": "Could not read the file",
     "network": "Network error: {{message}}"
   },
+  "columns": {
+    "title": "Columns to import",
+    "required": "Required columns",
+    "optional": "Optional columns",
+    "missing": "missing",
+    "missingRequired": "Required columns not found in CSV: {{columns}}"
+  },
   "result": {
     "success": "{{count}} user(s) created successfully",
     "partial": "Import completed with {{errorCount}} error(s)",

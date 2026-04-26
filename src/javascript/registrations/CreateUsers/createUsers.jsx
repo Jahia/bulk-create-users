@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {useMutation} from '@apollo/client';
 import {Button, Typography, Input, ChevronDown, ChevronUp} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
@@ -12,12 +12,22 @@ const getSiteKey = () => {
 
 const MAX_SIZE = 10 * 1024 * 1024;
 
+// Columns that must be present in every CSV row (non-negotiable)
+const REQUIRED_COLUMNS = ['j:nodename', 'j:password', 'j:firstName', 'j:lastName'];
+// Columns handled by the backend outside of property mapping
+const RESERVED_COLUMNS = ['j:nodename', 'j:password', 'groups'];
+
 const readFileAsText = file => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => resolve(e.target.result);
     reader.onerror = reject;
     reader.readAsText(file);
 });
+
+const parseHeaders = (text, sep) => {
+    const firstLine = text.split(/\r?\n/)[0] || '';
+    return firstLine.split(sep).map(h => h.trim().replace(/^["']|["']$/g, ''));
+};
 
 export const CreateUsers = () => {
     const {t} = useTranslation('bulk-create-users');
@@ -28,16 +38,47 @@ export const CreateUsers = () => {
     const [inputKey, setInputKey] = useState(0);
     const [importResult, setImportResult] = useState(null);
 
+    const [csvHeaders, setCsvHeaders] = useState([]);
+    const [missingRequired, setMissingRequired] = useState([]);
+    const [selectedOptionalColumns, setSelectedOptionalColumns] = useState([]);
+
     const siteKey = getSiteKey();
 
     const [importUsers, {loading: isUploading}] = useMutation(BULK_CREATE_USERS_IMPORT);
 
+    // Re-parse headers whenever the file or delimiter changes
+    useEffect(() => {
+        if (!csvFile) {
+            setCsvHeaders([]);
+            setMissingRequired([]);
+            setSelectedOptionalColumns([]);
+            return;
+        }
+
+        readFileAsText(csvFile).then(text => {
+            const sep = delimiter || ',';
+            const headers = parseHeaders(text, sep);
+            setCsvHeaders(headers);
+            setMissingRequired(REQUIRED_COLUMNS.filter(r => !headers.includes(r)));
+            // Pre-select all optional (non-reserved) columns
+            setSelectedOptionalColumns(headers.filter(h => !REQUIRED_COLUMNS.includes(h) && h !== 'groups'));
+        }).catch(() => {
+            setCsvHeaders([]);
+        });
+    }, [csvFile, delimiter]);
+
     const addMessage = (severity, text) => setMessages([{id: Date.now(), severity, text}]);
+
+    const toggleOptionalColumn = col => {
+        setSelectedOptionalColumns(prev =>
+            prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]
+        );
+    };
 
     const handleSubmit = async e => {
         e.preventDefault();
-        if (!csvFile) {
-            return addMessage('error', t('validation.noFile'));
+        if (!csvFile || missingRequired.length > 0) {
+            return;
         }
 
         setMessages([]);
@@ -50,9 +91,20 @@ export const CreateUsers = () => {
             return addMessage('error', t('error.readFile'));
         }
 
+        // Property columns to import: required property columns + user-selected optional ones
+        const selectedColumns = [
+            ...REQUIRED_COLUMNS.filter(c => !RESERVED_COLUMNS.includes(c)),
+            ...selectedOptionalColumns
+        ];
+
         try {
             const {data} = await importUsers({
-                variables: {csvContent, separator: delimiter, siteKey: siteKey || null}
+                variables: {
+                    csvContent,
+                    separator: delimiter,
+                    siteKey: siteKey || null,
+                    selectedColumns
+                }
             });
             const result = data?.bulkCreateUsersImport;
             setImportResult(result);
@@ -72,20 +124,22 @@ export const CreateUsers = () => {
     const handleFileChange = e => {
         const file = e.target.files[0];
         setImportResult(null);
+        setMessages([]);
         if (!file) {
             return setCsvFile(null);
         }
 
         if (!file.name.toLowerCase().endsWith('.csv')) {
-            return addMessage('error', t('validation.notCsv'));
+            addMessage('error', t('validation.notCsv'));
+            return setCsvFile(null);
         }
 
         if (file.size > MAX_SIZE) {
-            return addMessage('error', t('validation.tooLarge'));
+            addMessage('error', t('validation.tooLarge'));
+            return setCsvFile(null);
         }
 
         setCsvFile(file);
-        setMessages([]);
     };
 
     const handleCancel = () => {
@@ -109,6 +163,9 @@ export const CreateUsers = () => {
                 </button>
             </div>
         ));
+
+    const detectedRequired = csvHeaders.filter(h => REQUIRED_COLUMNS.includes(h));
+    const detectedOptional = csvHeaders.filter(h => !REQUIRED_COLUMNS.includes(h) && h !== 'groups');
 
     return (
         <div className={styles.bcu_root}>
@@ -152,13 +209,72 @@ export const CreateUsers = () => {
                             onChange={e => setDelimiter(e.target.value)}
                         />
                     </div>
+
+                    {csvHeaders.length > 0 && (
+                        <div id="bcu-columns" className={styles.bcu_columnsSection}>
+                            <Typography variant="subheading" weight="semiBold">
+                                {t('columns.title')}
+                            </Typography>
+
+                            {missingRequired.length > 0 && (
+                                <div id="bcu-missing-required" className={styles.bcu_missingRequired}>
+                                    {t('columns.missingRequired', {columns: missingRequired.join(', ')})}
+                                </div>
+                            )}
+
+                            <div className={styles.bcu_columnGroup}>
+                                <Typography variant="caption" weight="bold" className={styles.bcu_columnGroupLabel}>
+                                    {t('columns.required')}
+                                </Typography>
+                                {REQUIRED_COLUMNS.map(col => (
+                                    <label
+                                        key={col}
+                                        className={`${styles.bcu_columnItem} ${!detectedRequired.includes(col) ? styles.bcu_columnMissing : ''}`}
+                                    >
+                                        <input
+                                            id={`bcu-col-req-${col.replace(':', '-')}`}
+                                            type="checkbox"
+                                            checked={detectedRequired.includes(col)}
+                                            disabled
+                                            readOnly
+                                        />
+                                        <span>{col}</span>
+                                        {!detectedRequired.includes(col) && (
+                                            <span className={styles.bcu_missingBadge}>{t('columns.missing')}</span>
+                                        )}
+                                    </label>
+                                ))}
+                            </div>
+
+                            {detectedOptional.length > 0 && (
+                                <div className={styles.bcu_columnGroup}>
+                                    <Typography variant="caption" weight="bold" className={styles.bcu_columnGroupLabel}>
+                                        {t('columns.optional')}
+                                    </Typography>
+                                    {detectedOptional.map(col => (
+                                        <label key={col} className={styles.bcu_columnItem}>
+                                            <input
+                                                id={`bcu-col-opt-${col.replace(':', '-')}`}
+                                                type="checkbox"
+                                                checked={selectedOptionalColumns.includes(col)}
+                                                disabled={isUploading}
+                                                onChange={() => toggleOptionalColumn(col)}
+                                            />
+                                            <span>{col}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div className={styles.bcu_actions}>
                         <Button
                             id="bcu-submit"
                             type="submit"
                             color="accent"
                             label={isUploading ? t('button.importing') : t('button.submit')}
-                            disabled={!csvFile || isUploading}
+                            disabled={!csvFile || isUploading || missingRequired.length > 0}
                         />
                         <Button
                             id="bcu-cancel"

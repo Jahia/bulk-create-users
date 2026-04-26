@@ -16,26 +16,29 @@ import org.jahia.api.Constants;
 
 import javax.jcr.RepositoryException;
 import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 
 @Component(service = UsersHandler.class)
 public class UsersHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UsersHandler.class);
 
+    // Properties that must have a value in every row
+    private static final Set<String> REQUIRED_PROPERTY_COLUMNS = new HashSet<>(Arrays.asList("j:firstName", "j:lastName"));
+
     private JahiaUserManagerService userManagerService;
     private JahiaGroupManagerService groupManagerService;
 
-    public BulkCreateUsersResult importUsers(final String csvContent, final String separator, final String siteKey) throws RepositoryException {
+    public BulkCreateUsersResult importUsers(final String csvContent, final String separator,
+            final String siteKey, final List<String> selectedColumns) throws RepositoryException {
         if (siteKey != null) {
             LOGGER.info("Bulk adding users for site: {}", siteKey);
         }
         final long start = System.currentTimeMillis();
         final int[] counts = {0, 0, 0}; // [created, skipped, error]
         final List<String> errors = new ArrayList<>();
+        final Set<String> allowedColumns = (selectedColumns != null && !selectedColumns.isEmpty())
+                ? new HashSet<>(selectedColumns) : null;
 
         JCRTemplate.getInstance().doExecuteWithSystemSession(session -> {
             try (CSVReader reader = new CSVReader(new StringReader(csvContent), separator.charAt(0), '"')) {
@@ -64,7 +67,7 @@ public class UsersHandler {
                         session.save();
                         batch = 1;
                     }
-                    final int result = processUser(row, headerList, userIdx, passIdx, groupIdx, siteKey, session, errors);
+                    final int result = processUser(row, headerList, userIdx, passIdx, groupIdx, siteKey, session, errors, allowedColumns);
                     if (result == 0) {
                         counts[0]++;
                     } else if (result == 1) {
@@ -86,7 +89,9 @@ public class UsersHandler {
         return new BulkCreateUsersResult(counts[2] == 0, counts[0], counts[1], counts[2], errors);
     }
 
-    private int processUser(String[] row, List<String> headerList, int userIdx, int passIdx, int groupIdx, String siteKey, JCRSessionWrapper session, List<String> errors) {
+    private int processUser(String[] row, List<String> headerList, int userIdx, int passIdx,
+            int groupIdx, String siteKey, JCRSessionWrapper session, List<String> errors,
+            Set<String> allowedColumns) {
         final List<String> values = Arrays.asList(row);
         final String username = values.get(userIdx);
         final String password = values.get(passIdx);
@@ -94,7 +99,7 @@ public class UsersHandler {
 
         Properties props;
         try {
-            props = buildProperties(headerList, values);
+            props = buildProperties(headerList, values, allowedColumns);
         } catch (IllegalArgumentException ex) {
             LOGGER.error("Skipping user due to invalid data: {}", ex.getMessage());
             errors.add("Row for '" + username + "': " + ex.getMessage());
@@ -122,16 +127,24 @@ public class UsersHandler {
         return -1;
     }
 
-    private Properties buildProperties(List<String> headers, List<String> values) {
+    private Properties buildProperties(List<String> headers, List<String> values, Set<String> allowedColumns) {
         final Properties props = new Properties();
         for (int i = 0; i < headers.size(); i++) {
             final String key = headers.get(i);
-            if (!Constants.NODENAME.equals(key) && !JCRUserNode.J_PASSWORD.equals(key) && !"groups".equals(key)) {
-                if (i >= values.size() || values.get(i) == null || values.get(i).trim().isEmpty()) {
+            if (Constants.NODENAME.equals(key) || JCRUserNode.J_PASSWORD.equals(key) || "groups".equals(key)) {
+                continue;
+            }
+            if (allowedColumns != null && !allowedColumns.contains(key)) {
+                continue;
+            }
+            final boolean isEmpty = i >= values.size() || values.get(i) == null || values.get(i).trim().isEmpty();
+            if (isEmpty) {
+                if (REQUIRED_PROPERTY_COLUMNS.contains(key)) {
                     throw new IllegalArgumentException("Empty value for required column: " + key);
                 }
-                props.setProperty(key.trim(), values.get(i));
+                continue;
             }
+            props.setProperty(key.trim(), values.get(i));
         }
         return props;
     }

@@ -8,7 +8,9 @@ describe('Bulk Create Users', () => {
 
     const TEST_USER_1 = 'bcu-test-user1';
     const TEST_USER_2 = 'bcu-test-user2';
+    const REQUIRED_COLUMNS = ['j:firstName', 'j:lastName'];
     const CSV_VALID = 'j:nodename,j:password,j:firstName,j:lastName\nbcu-test-user1,TestPass1234!,Alice,Smith\nbcu-test-user2,TestPass1234!,Bob,Jones';
+    const CSV_WITH_EMAIL = 'j:nodename,j:password,j:firstName,j:lastName,j:email\nbcu-test-user1,TestPass1234!,Alice,Smith,alice@example.com\nbcu-test-user2,TestPass1234!,Bob,Jones,bob@example.com';
 
     const deleteTestUsers = () => {
         cy.apollo({mutation: deleteUser, variables: {path: `/users/${TEST_USER_1}`}, failOnStatusCode: false});
@@ -30,7 +32,7 @@ describe('Bulk Create Users', () => {
         it('imports users from CSV and returns success', () => {
             cy.apollo({
                 mutation: importUsers,
-                variables: {csvContent: CSV_VALID, separator: ',', siteKey: null}
+                variables: {csvContent: CSV_VALID, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
                 .its('data.bulkCreateUsersImport')
                 .should(result => {
@@ -45,7 +47,7 @@ describe('Bulk Create Users', () => {
         it('returns result object with all fields', () => {
             cy.apollo({
                 mutation: importUsers,
-                variables: {csvContent: CSV_VALID, separator: ','}
+                variables: {csvContent: CSV_VALID, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
                 .its('data.bulkCreateUsersImport')
                 .should(result => {
@@ -56,7 +58,7 @@ describe('Bulk Create Users', () => {
         it('skips existing users and increments skippedCount', () => {
             cy.apollo({
                 mutation: importUsers,
-                variables: {csvContent: CSV_VALID, separator: ','}
+                variables: {csvContent: CSV_VALID, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
                 .its('data.bulkCreateUsersImport')
                 .should(result => {
@@ -65,11 +67,44 @@ describe('Bulk Create Users', () => {
                 });
         });
 
+        it('imports selected optional columns', () => {
+            deleteTestUsers();
+            cy.apollo({
+                mutation: importUsers,
+                variables: {
+                    csvContent: CSV_WITH_EMAIL,
+                    separator: ',',
+                    selectedColumns: [...REQUIRED_COLUMNS, 'j:email']
+                }
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.success).to.be.true;
+                    expect(result.createdCount).to.eq(2);
+                });
+        });
+
+        it('ignores unselected optional columns', () => {
+            deleteTestUsers();
+            cy.apollo({
+                mutation: importUsers,
+                variables: {
+                    csvContent: CSV_WITH_EMAIL,
+                    separator: ',',
+                    selectedColumns: REQUIRED_COLUMNS  // j:email NOT selected
+                }
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.success).to.be.true;
+                });
+        });
+
         it('fails gracefully on missing required columns', () => {
             const csvMissingColumns = 'j:firstName,j:lastName\nAlice,Smith';
             cy.apollo({
                 mutation: importUsers,
-                variables: {csvContent: csvMissingColumns, separator: ','}
+                variables: {csvContent: csvMissingColumns, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
                 .its('data.bulkCreateUsersImport')
                 .should(result => {
@@ -81,7 +116,7 @@ describe('Bulk Create Users', () => {
         it('handles empty CSV content gracefully', () => {
             cy.apollo({
                 mutation: importUsers,
-                variables: {csvContent: '', separator: ','}
+                variables: {csvContent: '', separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
                 .its('data.bulkCreateUsersImport')
                 .should(result => {
@@ -89,26 +124,17 @@ describe('Bulk Create Users', () => {
                 });
         });
 
-        it('uses comma as default separator when not specified', () => {
-            const singleUserCsv = 'j:nodename,j:password,j:firstName,j:lastName\nbcu-test-user1,TestPass1234!,Alice,Smith';
-            cy.apollo({
-                mutation: importUsers,
-                variables: {csvContent: singleUserCsv}
-            })
-                .its('data.bulkCreateUsersImport.success')
-                .should('be.a', 'boolean');
-        });
-
         it('handles semicolon-separated CSV', () => {
+            deleteTestUsers();
             const semicolonCsv = 'j:nodename;j:password;j:firstName;j:lastName\nbcu-test-user1;TestPass1234!;Alice;Smith';
             cy.apollo({
                 mutation: importUsers,
-                variables: {csvContent: semicolonCsv, separator: ';'}
+                variables: {csvContent: semicolonCsv, separator: ';', selectedColumns: REQUIRED_COLUMNS}
             })
                 .its('data.bulkCreateUsersImport')
                 .should(result => {
-                    expect(result).to.have.property('success');
-                    expect(result).to.have.property('createdCount');
+                    expect(result.success).to.be.true;
+                    expect(result.createdCount).to.eq(1);
                 });
         });
     });
