@@ -5,7 +5,7 @@ import CreateUsers from '../CreateUsers';
 
 export const registerRoutes = function () {
     registry.add('adminRoute', 'bulkCreateUsers', {
-        targets: ['administration-server-usersAndRoles:9999'],
+        targets: ['administration-server-usersAndRoles:999'],
         requiredPermission: 'adminUsers',
         icon: null,
         label: 'bulk-create-users:users.label',
@@ -13,7 +13,7 @@ export const registerRoutes = function () {
         render: () => <CreateUsers/>
     });
 
-    registry.add('adminRoute', 'settings/bulkCreateUsers', {
+    registry.add('adminRoute', 'bulkCreateSiteUsers', {
         targets: ['administration-sites:999'],
         requiredPermission: 'siteAdminUsers',
         icon: <Person/>,
