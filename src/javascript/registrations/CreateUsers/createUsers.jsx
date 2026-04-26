@@ -39,6 +39,7 @@ export const CreateUsers = () => {
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [missingRequired, setMissingRequired] = useState([]);
     const [selectedOptionalColumns, setSelectedOptionalColumns] = useState([]);
+    const [overwrite, setOverwrite] = useState(false);
 
     const siteKey = getSiteKey();
 
@@ -105,7 +106,8 @@ export const CreateUsers = () => {
                     csvContent,
                     separator: delimiter,
                     siteKey: siteKey || null,
-                    selectedColumns
+                    selectedColumns,
+                    overwrite
                 }
             });
             const result = data?.bulkCreateUsersImport;
@@ -149,6 +151,7 @@ export const CreateUsers = () => {
         setDelimiter(',');
         setMessages([]);
         setImportResult(null);
+        setOverwrite(false);
         setInputKey(prev => prev + 1);
     };
 
@@ -270,6 +273,19 @@ export const CreateUsers = () => {
                         </div>
                     )}
 
+                    <div className={styles.bcu_formField}>
+                        <label className={styles.bcu_columnItem}>
+                            <input
+                                id="bcu-overwrite"
+                                type="checkbox"
+                                checked={overwrite}
+                                disabled={isUploading}
+                                onChange={e => setOverwrite(e.target.checked)}
+                            />
+                            <span>{t('label.overwrite')}</span>
+                        </label>
+                    </div>
+
                     <div className={styles.bcu_actions}>
                         <Button
                             id="bcu-submit"
@@ -294,6 +310,12 @@ export const CreateUsers = () => {
                             <span className={styles.bcu_resultLabel}>{t('result.label.created')}</span>
                             <span id="bcu-result-created">{importResult.createdCount}</span>
                         </div>
+                        {importResult.updatedCount > 0 && (
+                            <div className={styles.bcu_resultRow}>
+                                <span className={styles.bcu_resultLabel}>{t('result.label.updated')}</span>
+                                <span id="bcu-result-updated">{importResult.updatedCount}</span>
+                            </div>
+                        )}
                         <div className={styles.bcu_resultRow}>
                             <span className={styles.bcu_resultLabel}>{t('result.label.skipped')}</span>
                             <span id="bcu-result-skipped">{importResult.skippedCount}</span>

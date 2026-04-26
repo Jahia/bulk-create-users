@@ -6,7 +6,8 @@
   "label": {
     "csvFile": "CSV File",
     "delimiter": "CSV Delimiter",
-    "selected": "Selected: {{name}} ({{size}} KB)"
+    "selected": "Selected: {{name}} ({{size}} KB)",
+    "overwrite": "Overwrite existing users (except root)"
   },
   "placeholder": {
     "delimiter": "Enter delimiter (e.g., , ; |)"
@@ -37,6 +38,7 @@
     "partial": "Import completed with {{errorCount}} error(s)",
     "label": {
       "created": "Created:",
+      "updated": "Updated:",
       "skipped": "Skipped (already exist):",
       "errors": "Errors:"
     }

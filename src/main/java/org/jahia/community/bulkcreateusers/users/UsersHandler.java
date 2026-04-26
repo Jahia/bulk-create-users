@@ -35,12 +35,12 @@ public class UsersHandler {
     private JahiaGroupManagerService groupManagerService;
 
     public BulkCreateUsersResult importUsers(final String csvContent, final String separator,
-            final String siteKey, final List<String> selectedColumns) throws RepositoryException {
+            final String siteKey, final List<String> selectedColumns, final boolean overwrite) throws RepositoryException {
         if (siteKey != null) {
             LOGGER.info("Bulk adding users for site: {}", siteKey);
         }
         final long start = System.currentTimeMillis();
-        final int[] counts = {0, 0, 0}; // [created, skipped, error]
+        final int[] counts = {0, 0, 0, 0}; // [created, skipped, error, updated]
         final List<String> errors = new ArrayList<>();
         final Set<String> allowedColumns = (selectedColumns != null && !selectedColumns.isEmpty())
                 ? new HashSet<>(selectedColumns) : null;
@@ -72,11 +72,13 @@ public class UsersHandler {
                         session.save();
                         batch = 1;
                     }
-                    final int result = processUser(row, headerList, userIdx, passIdx, groupIdx, siteKey, session, errors, allowedColumns);
+                    final int result = processUser(row, headerList, userIdx, passIdx, groupIdx, siteKey, session, errors, allowedColumns, overwrite);
                     if (result == 0) {
                         counts[0]++;
                     } else if (result == 1) {
                         counts[1]++;
+                    } else if (result == 2) {
+                        counts[3]++;
                     } else {
                         counts[2]++;
                     }
@@ -91,12 +93,12 @@ public class UsersHandler {
         });
 
         LOGGER.info("Bulk user import completed in {} ms — created={}, skipped={}, errors={}", System.currentTimeMillis() - start, counts[0], counts[1], counts[2]);
-        return new BulkCreateUsersResult(counts[2] == 0, counts[0], counts[1], counts[2], errors);
+        return new BulkCreateUsersResult(counts[2] == 0, counts[0], counts[3], counts[1], counts[2], errors);
     }
 
     private int processUser(String[] row, List<String> headerList, int userIdx, int passIdx,
             int groupIdx, String siteKey, JCRSessionWrapper session, List<String> errors,
-            Set<String> allowedColumns) {
+            Set<String> allowedColumns, boolean overwrite) {
         final List<String> values = Arrays.asList(row);
         final String username = values.get(userIdx);
         final String password = values.get(passIdx);
@@ -114,10 +116,25 @@ public class UsersHandler {
         final boolean assignGroups = groupIdx >= 0 && (allowedColumns == null || allowedColumns.contains("groups"));
         final JCRUserNode existing = userManagerService.lookupUser(username, siteKey, session);
         if (existing != null) {
+            if (overwrite && !"root".equals(username)) {
+                try {
+                    for (final Map.Entry<Object, Object> entry : props.entrySet()) {
+                        existing.setProperty((String) entry.getKey(), (String) entry.getValue());
+                    }
+                } catch (RepositoryException e) {
+                    LOGGER.error("Failed to update properties for user {}: {}", username, e.getMessage());
+                    errors.add("Failed to update user: " + username);
+                    return -1;
+                }
+                if (assignGroups) {
+                    addUserToGroups(existing, groups, siteKey, session);
+                }
+                return 2; // updated
+            }
             if (assignGroups) {
                 addUserToGroups(existing, groups, siteKey, session);
             }
-            return 1;
+            return 1; // skipped
         }
         if (!userManagerService.isUsernameSyntaxCorrect(username)) {
             LOGGER.error("Invalid username syntax: {}", username);

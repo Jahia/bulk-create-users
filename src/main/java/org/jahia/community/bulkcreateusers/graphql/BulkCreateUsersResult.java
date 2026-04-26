@@ -12,13 +12,15 @@ public class BulkCreateUsersResult {
 
     private final boolean success;
     private final int createdCount;
+    private final int updatedCount;
     private final int skippedCount;
     private final int errorCount;
     private final List<String> errors;
 
-    public BulkCreateUsersResult(boolean success, int createdCount, int skippedCount, int errorCount, List<String> errors) {
+    public BulkCreateUsersResult(boolean success, int createdCount, int updatedCount, int skippedCount, int errorCount, List<String> errors) {
         this.success = success;
         this.createdCount = createdCount;
+        this.updatedCount = updatedCount;
         this.skippedCount = skippedCount;
         this.errorCount = errorCount;
         this.errors = errors;
@@ -39,8 +41,15 @@ public class BulkCreateUsersResult {
     }
 
     @GraphQLField
+    @GraphQLName("updatedCount")
+    @GraphQLDescription("Number of existing users whose properties were overwritten")
+    public int getUpdatedCount() {
+        return updatedCount;
+    }
+
+    @GraphQLField
     @GraphQLName("skippedCount")
-    @GraphQLDescription("Number of rows skipped because the user already existed")
+    @GraphQLDescription("Number of rows skipped because the user already existed and overwrite was not requested")
     public int getSkippedCount() {
         return skippedCount;
     }

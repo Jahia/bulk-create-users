@@ -33,19 +33,20 @@ public class BulkCreateUsersMutationExtension {
             @GraphQLName("csvContent") @GraphQLNonNull final String csvContent,
             @GraphQLName("separator") final String separator,
             @GraphQLName("siteKey") final String siteKey,
-            @GraphQLName("selectedColumns") final List<String> selectedColumns) {
+            @GraphQLName("selectedColumns") final List<String> selectedColumns,
+            @GraphQLName("overwrite") final Boolean overwrite) {
         final UsersHandler handler = BundleUtils.getOsgiService(UsersHandler.class, null);
         if (handler == null) {
             LOGGER.error("UsersHandler service is not available");
-            return new BulkCreateUsersResult(false, 0, 0, 1, Collections.singletonList("Service unavailable"));
+            return new BulkCreateUsersResult(false, 0, 0, 0, 1, Collections.singletonList("Service unavailable"));
         }
         final String sep = (separator != null && !separator.isEmpty()) ? separator : ",";
         final String site = (siteKey != null && !siteKey.isEmpty()) ? siteKey : null;
         try {
-            return handler.importUsers(csvContent, sep, site, selectedColumns);
+            return handler.importUsers(csvContent, sep, site, selectedColumns, Boolean.TRUE.equals(overwrite));
         } catch (Exception e) {
             LOGGER.error("Error during bulk user import", e);
-            return new BulkCreateUsersResult(false, 0, 0, 1, Collections.singletonList(e.getMessage()));
+            return new BulkCreateUsersResult(false, 0, 0, 0, 1, Collections.singletonList(e.getMessage()));
         }
     }
 }
