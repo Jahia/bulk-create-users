@@ -55,7 +55,7 @@
     "notes": {
       "title": "Notes",
       "headers": "First row must be column names",
-      "maxSize": "Maximum file size: 10MB"
+      "maxSize": "Maximum file size: {{maxSizeMb}}MB"
     }
   }
 }

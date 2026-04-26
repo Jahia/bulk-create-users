@@ -10,8 +10,6 @@ const getSiteKey = () => {
     return (parts.length === 3 && parts[1] === 'settings' && parts[2] === 'bulkCreateUsers') ? parts[0] : null;
 };
 
-const DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
-
 // Columns that must be present in every CSV row (non-negotiable)
 const REQUIRED_COLUMNS = ['j:nodename', 'j:password', 'j:firstName', 'j:lastName'];
 // Columns handled by the backend outside of property mapping
@@ -45,7 +43,8 @@ export const CreateUsers = () => {
     const siteKey = getSiteKey();
 
     const {data: settingsData} = useQuery(GET_MAX_UPLOAD_SIZE);
-    const maxSize = settingsData?.bulkCreateUsersMaxUploadSize ?? DEFAULT_MAX_SIZE;
+    const maxSize = settingsData?.bulkCreateUsersMaxUploadSize;
+    const maxSizeMb = maxSize != null ? Math.floor(maxSize / (1024 * 1024)) : null;
 
     const [importUsers, {loading: isUploading}] = useMutation(BULK_CREATE_USERS_IMPORT);
 
@@ -137,8 +136,8 @@ export const CreateUsers = () => {
             return setCsvFile(null);
         }
 
-        if (file.size > maxSize) {
-            addMessage('error', t('validation.tooLarge', {maxSizeMb: Math.floor(maxSize / (1024 * 1024))}));
+        if (maxSize != null && file.size > maxSize) {
+            addMessage('error', t('validation.tooLarge', {maxSizeMb}));
             return setCsvFile(null);
         }
 
@@ -346,7 +345,7 @@ export const CreateUsers = () => {
                                 <div>
                                     <dt className={styles.bcu_descriptionListTerm}>{t('requirements.notes.title')}</dt>
                                     <dd className={styles.bcu_descriptionListDescription}>{t('requirements.notes.headers')}</dd>
-                                    <dd className={styles.bcu_descriptionListDescription}>{t('requirements.notes.maxSize')}</dd>
+                                    <dd className={styles.bcu_descriptionListDescription}>{t('requirements.notes.maxSize', {maxSizeMb})}</dd>
                                 </div>
                             </dl>
                         </div>
