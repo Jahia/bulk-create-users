@@ -85,15 +85,3 @@ mutation {
 ```
 
 Both operations require the `adminUsers` permission.
-
-## Build
-
-```bash
-mvn clean install
-```
-
-Requires Maven 3.x. Node and Yarn are managed automatically by the `frontend-maven-plugin` (Node v22, Yarn 1.22).
-
-## License
-
-Apache License 2.0
