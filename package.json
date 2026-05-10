@@ -61,5 +61,11 @@
     "webpack-bundle-analyzer": "^4.4.2",
     "webpack-cli": "^4.8.0"
   },
+  "resolutions": {
+    "@babel/plugin-transform-modules-systemjs": "^7.29.4",
+    "fast-uri": "^3.1.2",
+    "postcss": "^8.5.10",
+    "serialize-javascript": "^7.0.5"
+  },
   "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610"
 }
