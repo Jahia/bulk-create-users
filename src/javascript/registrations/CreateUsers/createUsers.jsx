@@ -260,7 +260,7 @@ export const CreateUsers = () => {
                                 {t('columns.title')}
                             </Typography>
 
-                            <div id="bcu-missing-required" role="alert" aria-live="assertive" className={styles.bcu_missingRequired}>
+                            <div id="bcu-missing-required" role="alert" aria-live="assertive" className={missingRequired.length > 0 ? styles.bcu_missingRequired : ''}>
                                 {missingRequired.length > 0 && t('columns.missingRequired', {columns: missingRequired.join(', ')})}
                             </div>
 
