@@ -43,7 +43,7 @@
 
 .bcu_success {
   background-color: #e6f4ea;
-  color: #256029;
+  color: #184f1c;
   border: 1px solid #b1dfbb;
 }
 
@@ -82,10 +82,49 @@
     display: inline-block;
   }
 
-  .bcu_fileInfo {
-    color: var(--moonstone-color-gray60);
-    margin-top: 0.3rem;
+  .bcu_fileBtn {
+    display: inline-block;
+    padding: 7px 14px;
+    background-color: #fff;
+    border: 1px solid #004a80;
+    border-radius: 4px;
+    color: #004a80;
+    font-size: 0.875rem;
+    font-family: inherit;
+    cursor: pointer;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: background-color 0.2s;
+    }
+
+    &:hover:not(:disabled) {
+      background-color: #e8f2fb;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #004a80;
+      outline-offset: 2px;
+    }
+  }
+
+  .bcu_fileInput {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .bcu_fileName {
     display: block;
+    font-size: 0.875rem;
+    margin-top: 0.3rem;
   }
 
   .bcu_fileHint {

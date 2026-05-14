@@ -7,6 +7,7 @@
     "csvFile": "CSV File",
     "delimiter": "CSV Delimiter",
     "selected": "Selected: {{name}} ({{size}} KB)",
+    "chooseFile": "Choose file",
     "overwrite": "Overwrite existing users (except root)"
   },
   "placeholder": {

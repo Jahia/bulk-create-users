@@ -38,6 +38,7 @@ export const CreateUsers = () => {
 
     const alertRef = useRef(null);
     const statusRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [missingRequired, setMissingRequired] = useState([]);
@@ -221,21 +222,29 @@ export const CreateUsers = () => {
                         <span id="bcu-file-hint" className={styles.bcu_fileHint}>
                             {maxSizeMb != null ? t('hint.csvFile', {maxSizeMb}) : t('hint.csvFileFormat')}
                         </span>
-                        <Input
-                            key={inputKey}
-                            type="file"
+                        <button
+                            type="button"
                             id="bcu-csv-file"
-                            name="csvFile"
-                            accept=".csv"
-                            required
+                            className={styles.bcu_fileBtn}
                             disabled={isUploading}
                             aria-describedby="bcu-file-hint"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {t('label.chooseFile')}
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            name="csvFile"
+                            accept=".csv"
+                            className={styles.bcu_fileInput}
+                            disabled={isUploading}
                             onChange={handleFileChange}
                         />
                         {csvFile && (
-                            <Typography variant="caption" className={styles.bcu_fileInfo}>
+                            <span aria-live="polite" aria-atomic="true" className={styles.bcu_fileName}>
                                 {t('label.selected', {name: csvFile.name, size: (csvFile.size / 1024).toFixed(1)})}
-                            </Typography>
+                            </span>
                         )}
                     </div>
                     <div className={styles.bcu_formField}>
