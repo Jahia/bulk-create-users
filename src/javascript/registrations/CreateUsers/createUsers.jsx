@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {useMutation, useQuery} from '@apollo/client';
 import {Button, Typography, Input, ChevronDown, ChevronUp} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
@@ -35,6 +35,8 @@ export const CreateUsers = () => {
     const [showRequirements, setShowRequirements] = useState(false);
     const [inputKey, setInputKey] = useState(0);
     const [importResult, setImportResult] = useState(null);
+
+    const liveRef = useRef(null);
 
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [missingRequired, setMissingRequired] = useState([]);
@@ -123,6 +125,8 @@ export const CreateUsers = () => {
         } catch (err) {
             addMessage('error', t('error.network', {message: err.message}));
         }
+
+        setTimeout(() => liveRef.current?.focus(), 50);
     };
 
     const handleFileChange = e => {
@@ -172,8 +176,22 @@ export const CreateUsers = () => {
     const detectedRequired = csvHeaders.filter(h => REQUIRED_COLUMNS.includes(h));
     const detectedOptional = csvHeaders.filter(h => !REQUIRED_COLUMNS.includes(h));
 
+    const liveMsg = messages[0]?.text ?? '';
+    const liveRole = messages[0]?.severity === 'error' ? 'alert' : 'status';
+
     return (
         <div className={styles.bcu_root}>
+            {/* Persistent live region — always in DOM so AT registers it before status changes */}
+            <div
+                ref={liveRef}
+                tabIndex={-1}
+                role={liveRole}
+                aria-live={liveRole === 'alert' ? 'assertive' : 'polite'}
+                aria-atomic="true"
+                className={styles.bcu_sr_only}
+            >
+                {liveMsg}
+            </div>
             <div className={styles.bcu_headerRoot}>
                 <header className={styles.bcu_header}>
                     <Typography variant="title" weight="semiBold">{t('title')}</Typography>
@@ -227,10 +245,10 @@ export const CreateUsers = () => {
                                 </div>
                             )}
 
-                            <div className={styles.bcu_columnGroup}>
-                                <Typography variant="caption" weight="bold" className={styles.bcu_columnGroupLabel}>
+                            <fieldset className={styles.bcu_columnFieldset}>
+                                <legend className={styles.bcu_columnGroupLabel}>
                                     {t('columns.required')}
-                                </Typography>
+                                </legend>
                                 {REQUIRED_COLUMNS.map(col => (
                                     <label
                                         key={col}
@@ -249,13 +267,13 @@ export const CreateUsers = () => {
                                         )}
                                     </label>
                                 ))}
-                            </div>
+                            </fieldset>
 
                             {detectedOptional.length > 0 && (
-                                <div className={styles.bcu_columnGroup}>
-                                    <Typography variant="caption" weight="bold" className={styles.bcu_columnGroupLabel}>
+                                <fieldset className={styles.bcu_columnFieldset}>
+                                    <legend className={styles.bcu_columnGroupLabel}>
                                         {t('columns.optional')}
-                                    </Typography>
+                                    </legend>
                                     {detectedOptional.map(col => (
                                         <label key={col} className={styles.bcu_columnItem}>
                                             <input
@@ -268,7 +286,7 @@ export const CreateUsers = () => {
                                             <span>{col}</span>
                                         </label>
                                     ))}
-                                </div>
+                                </fieldset>
                             )}
                         </div>
                     )}
@@ -305,7 +323,7 @@ export const CreateUsers = () => {
                 </form>
 
                 {importResult && (
-                    <div id="bcu-result" className={styles.bcu_resultBox}>
+                    <div id="bcu-result" role="status" aria-live="polite" className={styles.bcu_resultBox}>
                         <div className={styles.bcu_resultRow}>
                             <span className={styles.bcu_resultLabel}>{t('result.label.created')}</span>
                             <span id="bcu-result-created">{importResult.createdCount}</span>
@@ -342,6 +360,8 @@ export const CreateUsers = () => {
                         type="button"
                         id="bcu-toggle-requirements"
                         className={styles.bcu_toggleRequirements}
+                        aria-expanded={showRequirements}
+                        aria-controls="bcu-requirements-box"
                         onClick={() => setShowRequirements(v => !v)}
                     >
                         <Typography variant="subheading" weight="default">
@@ -350,7 +370,7 @@ export const CreateUsers = () => {
                         {showRequirements ? <ChevronUp size="small"/> : <ChevronDown size="small"/>}
                     </button>
                     {showRequirements && (
-                        <div className={styles.bcu_requirementsBox}>
+                        <div id="bcu-requirements-box" className={styles.bcu_requirementsBox}>
                             <dl className={styles.bcu_descriptionList}>
                                 <div>
                                     <dt className={styles.bcu_descriptionListTerm}>{t('requirements.required.title')}</dt>
