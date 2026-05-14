@@ -147,6 +147,22 @@
   background-color: var(--moonstone-color-gray20, #f4f4f4);
   border-radius: 8px;
   padding: 1rem 1.5rem;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.bcu_resultBox_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .bcu_resultRow {

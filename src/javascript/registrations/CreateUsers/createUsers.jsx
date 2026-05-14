@@ -350,7 +350,7 @@ export const CreateUsers = () => {
                     </div>
                 </form>
 
-                <div id="bcu-result" role="status" aria-live="polite" className={styles.bcu_resultBox}>
+                <div id="bcu-result" role="status" aria-live="polite" className={importResult ? styles.bcu_resultBox : `${styles.bcu_resultBox} ${styles.bcu_resultBox_hidden}`}>
                     {importResult && (
                         <>
                             <div className={styles.bcu_resultRow}>
