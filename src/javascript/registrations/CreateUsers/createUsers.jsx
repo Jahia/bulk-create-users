@@ -36,7 +36,8 @@ export const CreateUsers = () => {
     const [inputKey, setInputKey] = useState(0);
     const [importResult, setImportResult] = useState(null);
 
-    const liveRef = useRef(null);
+    const alertRef = useRef(null);
+    const statusRef = useRef(null);
 
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [missingRequired, setMissingRequired] = useState([]);
@@ -44,6 +45,10 @@ export const CreateUsers = () => {
     const [overwrite, setOverwrite] = useState(false);
 
     const siteKey = getSiteKey();
+
+    useEffect(() => {
+        document.title = t('title');
+    }, [t]);
 
     const {data: settingsData} = useQuery(GET_MAX_UPLOAD_SIZE);
     const maxSize = settingsData?.bulkCreateUsersMaxUploadSize;
@@ -93,7 +98,9 @@ export const CreateUsers = () => {
         try {
             csvContent = await readFileAsText(csvFile);
         } catch {
-            return addMessage('error', t('error.readFile'));
+            addMessage('error', t('error.readFile'));
+            setTimeout(() => alertRef.current?.focus(), 50);
+            return;
         }
 
         // Property columns to import: required property columns + user-selected optional ones
@@ -116,17 +123,18 @@ export const CreateUsers = () => {
             setImportResult(result);
             if (result?.success) {
                 addMessage('success', t('result.success', {count: result.createdCount}));
+                setTimeout(() => statusRef.current?.focus(), 50);
                 setCsvFile(null);
                 setDelimiter(',');
                 setInputKey(prev => prev + 1);
             } else {
                 addMessage('error', t('result.partial', {errorCount: result?.errorCount ?? 1}));
+                setTimeout(() => alertRef.current?.focus(), 50);
             }
         } catch (err) {
             addMessage('error', t('error.network', {message: err.message}));
+            setTimeout(() => alertRef.current?.focus(), 50);
         }
-
-        setTimeout(() => liveRef.current?.focus(), 50);
     };
 
     const handleFileChange = e => {
@@ -166,7 +174,7 @@ export const CreateUsers = () => {
                 <button
                     type="button"
                     className={styles.bcu_closeBtn}
-                    aria-label="Close message"
+                    aria-label={t('button.closeMessage')}
                     onClick={() => setMessages(msgs => msgs.filter(msg => msg.id !== m.id))}
                 >×
                 </button>
@@ -176,39 +184,52 @@ export const CreateUsers = () => {
     const detectedRequired = csvHeaders.filter(h => REQUIRED_COLUMNS.includes(h));
     const detectedOptional = csvHeaders.filter(h => !REQUIRED_COLUMNS.includes(h));
 
-    const liveMsg = messages[0]?.text ?? '';
-    const liveRole = messages[0]?.severity === 'error' ? 'alert' : 'status';
-
     return (
         <div className={styles.bcu_root}>
-            {/* Persistent live region — always in DOM so AT registers it before status changes */}
+            {/* Alert live region — always in DOM with fixed role */}
             <div
-                ref={liveRef}
+                ref={alertRef}
                 tabIndex={-1}
-                role={liveRole}
-                aria-live={liveRole === 'alert' ? 'assertive' : 'polite'}
+                role="alert"
+                aria-live="assertive"
                 aria-atomic="true"
                 className={styles.bcu_sr_only}
             >
-                {liveMsg}
+                {messages[0]?.severity === 'error' ? messages[0]?.text : ''}
+            </div>
+            {/* Status live region — always in DOM with fixed role */}
+            <div
+                ref={statusRef}
+                tabIndex={-1}
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className={styles.bcu_sr_only}
+            >
+                {messages[0]?.severity === 'success' ? messages[0]?.text : ''}
             </div>
             <div className={styles.bcu_headerRoot}>
                 <header className={styles.bcu_header}>
                     <Typography variant="title" weight="semiBold">{t('title')}</Typography>
                 </header>
                 {renderMessages()}
-                <form className={styles.bcu_form} onSubmit={handleSubmit}>
+                <form className={styles.bcu_form} onSubmit={handleSubmit} aria-busy={isUploading}>
                     <div className={styles.bcu_formField}>
                         <Typography component="label" htmlFor="bcu-csv-file" variant="body" weight="bold">
                             {t('label.csvFile')}
                         </Typography>
+                        <span id="bcu-file-hint" className={styles.bcu_fileHint}>
+                            {maxSizeMb != null ? t('hint.csvFile', {maxSizeMb}) : t('hint.csvFileFormat')}
+                        </span>
                         <Input
                             key={inputKey}
                             type="file"
                             id="bcu-csv-file"
                             name="csvFile"
                             accept=".csv"
+                            required
                             disabled={isUploading}
+                            aria-describedby="bcu-file-hint"
                             onChange={handleFileChange}
                         />
                         {csvFile && (
@@ -239,11 +260,9 @@ export const CreateUsers = () => {
                                 {t('columns.title')}
                             </Typography>
 
-                            {missingRequired.length > 0 && (
-                                <div id="bcu-missing-required" className={styles.bcu_missingRequired}>
-                                    {t('columns.missingRequired', {columns: missingRequired.join(', ')})}
-                                </div>
-                            )}
+                            <div id="bcu-missing-required" role="alert" aria-live="assertive" className={styles.bcu_missingRequired}>
+                                {missingRequired.length > 0 && t('columns.missingRequired', {columns: missingRequired.join(', ')})}
+                            </div>
 
                             <fieldset className={styles.bcu_columnFieldset}>
                                 <legend className={styles.bcu_columnGroupLabel}>
@@ -322,38 +341,40 @@ export const CreateUsers = () => {
                     </div>
                 </form>
 
-                {importResult && (
-                    <div id="bcu-result" role="status" aria-live="polite" className={styles.bcu_resultBox}>
-                        <div className={styles.bcu_resultRow}>
-                            <span className={styles.bcu_resultLabel}>{t('result.label.created')}</span>
-                            <span id="bcu-result-created">{importResult.createdCount}</span>
-                        </div>
-                        {importResult.updatedCount > 0 && (
+                <div id="bcu-result" role="status" aria-live="polite" className={styles.bcu_resultBox}>
+                    {importResult && (
+                        <>
                             <div className={styles.bcu_resultRow}>
-                                <span className={styles.bcu_resultLabel}>{t('result.label.updated')}</span>
-                                <span id="bcu-result-updated">{importResult.updatedCount}</span>
+                                <span className={styles.bcu_resultLabel}>{t('result.label.created')}</span>
+                                <span id="bcu-result-created">{importResult.createdCount}</span>
                             </div>
-                        )}
-                        <div className={styles.bcu_resultRow}>
-                            <span className={styles.bcu_resultLabel}>{t('result.label.skipped')}</span>
-                            <span id="bcu-result-skipped">{importResult.skippedCount}</span>
-                        </div>
-                        {importResult.errorCount > 0 && (
+                            {importResult.updatedCount > 0 && (
+                                <div className={styles.bcu_resultRow}>
+                                    <span className={styles.bcu_resultLabel}>{t('result.label.updated')}</span>
+                                    <span id="bcu-result-updated">{importResult.updatedCount}</span>
+                                </div>
+                            )}
                             <div className={styles.bcu_resultRow}>
-                                <span className={styles.bcu_resultLabel}>{t('result.label.errors')}</span>
-                                <span id="bcu-result-errors">{importResult.errorCount}</span>
+                                <span className={styles.bcu_resultLabel}>{t('result.label.skipped')}</span>
+                                <span id="bcu-result-skipped">{importResult.skippedCount}</span>
                             </div>
-                        )}
-                        {importResult.errors && importResult.errors.length > 0 && (
-                            <ul id="bcu-error-list" className={styles.bcu_errorList}>
-                                {importResult.errors.map((err, i) => (
-                                    // eslint-disable-next-line react/no-array-index-key
-                                    <li key={i}>{err}</li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                )}
+                            {importResult.errorCount > 0 && (
+                                <div className={styles.bcu_resultRow}>
+                                    <span className={styles.bcu_resultLabel}>{t('result.label.errors')}</span>
+                                    <span id="bcu-result-errors">{importResult.errorCount}</span>
+                                </div>
+                            )}
+                            {importResult.errors && importResult.errors.length > 0 && (
+                                <ul id="bcu-error-list" className={styles.bcu_errorList}>
+                                    {importResult.errors.map((err, i) => (
+                                        // eslint-disable-next-line react/no-array-index-key
+                                        <li key={i}>{err}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </>
+                    )}
+                </div>
 
                 <div className={styles.bcu_section}>
                     <button
@@ -364,34 +385,34 @@ export const CreateUsers = () => {
                         aria-controls="bcu-requirements-box"
                         onClick={() => setShowRequirements(v => !v)}
                     >
-                        <Typography variant="subheading" weight="default">
+                        <Typography component="span" variant="subheading" weight="default">
                             {showRequirements ? t('requirements.hide') : t('requirements.show')}
                         </Typography>
-                        {showRequirements ? <ChevronUp size="small"/> : <ChevronDown size="small"/>}
+                        <span aria-hidden="true">
+                            {showRequirements ? <ChevronUp size="small"/> : <ChevronDown size="small"/>}
+                        </span>
                     </button>
-                    {showRequirements && (
-                        <div id="bcu-requirements-box" className={styles.bcu_requirementsBox}>
-                            <dl className={styles.bcu_descriptionList}>
-                                <div>
-                                    <dt className={styles.bcu_descriptionListTerm}>{t('requirements.required.title')}</dt>
-                                    <dd className={styles.bcu_descriptionListDescription}>
-                                        {t('requirements.required.body')}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className={styles.bcu_descriptionListTerm}>{t('requirements.optional.title')}</dt>
-                                    <dd className={styles.bcu_descriptionListDescription}>
-                                        {t('requirements.optional.body')}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className={styles.bcu_descriptionListTerm}>{t('requirements.notes.title')}</dt>
-                                    <dd className={styles.bcu_descriptionListDescription}>{t('requirements.notes.headers')}</dd>
-                                    <dd className={styles.bcu_descriptionListDescription}>{t('requirements.notes.maxSize', {maxSizeMb})}</dd>
-                                </div>
-                            </dl>
-                        </div>
-                    )}
+                    <div id="bcu-requirements-box" hidden={!showRequirements} className={styles.bcu_requirementsBox}>
+                        <dl className={styles.bcu_descriptionList}>
+                            <div>
+                                <dt className={styles.bcu_descriptionListTerm}>{t('requirements.required.title')}</dt>
+                                <dd className={styles.bcu_descriptionListDescription}>
+                                    {t('requirements.required.body')}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className={styles.bcu_descriptionListTerm}>{t('requirements.optional.title')}</dt>
+                                <dd className={styles.bcu_descriptionListDescription}>
+                                    {t('requirements.optional.body')}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className={styles.bcu_descriptionListTerm}>{t('requirements.notes.title')}</dt>
+                                <dd className={styles.bcu_descriptionListDescription}>{t('requirements.notes.headers')}</dd>
+                                <dd className={styles.bcu_descriptionListDescription}>{t('requirements.notes.maxSize', {maxSizeMb})}</dd>
+                            </div>
+                        </dl>
+                    </div>
                 </div>
             </div>
         </div>

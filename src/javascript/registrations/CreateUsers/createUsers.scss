@@ -87,6 +87,13 @@
     margin-top: 0.3rem;
     display: block;
   }
+
+  .bcu_fileHint {
+    color: var(--moonstone-color-gray60);
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+    display: block;
+  }
 }
 
 .bcu_actions {
@@ -175,12 +182,11 @@
 }
 
 .bcu_columnMissing {
-  color: #a4262c;
-  opacity: 0.7;
+    color: #9a1f24;
 }
 
 .bcu_missingBadge {
-  font-size: 0.75rem;
+    font-size: 0.8125rem;
   color: #a4262c;
   background-color: #fdecea;
   border: 1px solid #f5c6cb;

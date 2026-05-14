@@ -12,10 +12,15 @@
   "placeholder": {
     "delimiter": "Enter delimiter (e.g., , ; |)"
   },
+  "hint": {
+    "csvFile": "CSV format required. Maximum file size: {{maxSizeMb}}MB.",
+    "csvFileFormat": "CSV format required."
+  },
   "button": {
     "submit": "Submit",
     "importing": "Importing…",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "closeMessage": "Close message"
   },
   "validation": {
     "noFile": "Please select a CSV file",
@@ -30,7 +35,7 @@
     "title": "Columns to import",
     "required": "Required columns",
     "optional": "Optional columns",
-    "missing": "missing",
+    "missing": "missing from CSV",
     "missingRequired": "Required columns not found in CSV: {{columns}}"
   },
   "result": {
