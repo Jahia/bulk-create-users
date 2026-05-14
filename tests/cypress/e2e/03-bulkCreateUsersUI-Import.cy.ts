@@ -91,7 +91,8 @@ describe('Bulk Create Users — UI Import flow', () => {
             cy.get('#bcu-submit').click();
             cy.get('#bcu-result', {timeout: 15000}).should('be.visible');
             cy.get('#bcu-cancel').click();
-            cy.get('#bcu-result').should('not.exist');
+            cy.get('#bcu-result').should('be.empty')
+              .and('match', ':empty');
         });
     });
 });

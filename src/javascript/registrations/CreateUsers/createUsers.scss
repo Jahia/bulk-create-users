@@ -146,6 +146,11 @@
 }
 
 .bcu_columnFieldset {
+  border: none !important;
+  padding: 0px 0px 0px 0px !important;
+  margin: 0 0px 0px 0 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
   border-bottom: 1px solid #c4c0c0 !important;
 }
 

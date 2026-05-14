@@ -65,9 +65,10 @@ describe('Bulk Create Users — UI Layout', () => {
         it('hides requirements again when toggled a second time', () => {
             cy.login();
             cy.visit(ADMIN_ROUTE);
-            cy.get('#bcu-toggle-requirements').click();
-            cy.get('#bcu-toggle-requirements').click();
-            cy.contains('j:nodename').should('not.exist');
+            cy.get('[id=bcu-toggle-requirements]').click();
+            cy.get('[id=bcu-requirements-box]').should('be.visible');
+            cy.get('[id=bcu-toggle-requirements]').click();
+            cy.get('[id=bcu-requirements-box]').should('not.be.visible');
         });
     });
 });
