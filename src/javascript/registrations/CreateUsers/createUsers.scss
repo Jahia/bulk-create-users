@@ -139,6 +139,21 @@
   display: flex;
   gap: 1rem;
   margin-top: 1rem;
+
+  #bcu-submit {
+    background-color: #004a80;
+    border-color: #004a80;
+
+    &:hover:not(:disabled) {
+      background-color: #003a63;
+      border-color: #003a63;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #004a80;
+      outline-offset: 2px;
+    }
+  }
 }
 
 .bcu_resultBox {

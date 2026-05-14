@@ -238,6 +238,7 @@ export const CreateUsers = () => {
                             name="csvFile"
                             accept=".csv"
                             className={styles.bcu_fileInput}
+                            aria-label={t('label.csvFile')}
                             disabled={isUploading}
                             onChange={handleFileChange}
                         />
