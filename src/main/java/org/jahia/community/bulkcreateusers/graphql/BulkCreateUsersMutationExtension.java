@@ -9,9 +9,11 @@ import org.jahia.community.bulkcreateusers.users.UsersHandler;
 import org.jahia.modules.graphql.provider.dxm.DXGraphQLProvider;
 import org.jahia.modules.graphql.provider.dxm.security.GraphQLRequiresPermission;
 import org.jahia.osgi.BundleUtils;
+import org.jahia.settings.SettingsBean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
@@ -35,6 +37,12 @@ public class BulkCreateUsersMutationExtension {
             @GraphQLName("siteKey") final String siteKey,
             @GraphQLName("selectedColumns") final List<String> selectedColumns,
             @GraphQLName("overwrite") final Boolean overwrite) {
+        final long maxBytes = SettingsBean.getInstance().getJahiaFileUploadMaxSize();
+        if (maxBytes > 0 && csvContent.getBytes(StandardCharsets.UTF_8).length > maxBytes) {
+            LOGGER.warn("Rejecting bulk user import: payload exceeds configured upload size limit of {} bytes", maxBytes);
+            return new BulkCreateUsersResult(false, 0, 0, 0, 1,
+                    Collections.singletonList("CSV payload exceeds the configured upload size limit"));
+        }
         final UsersHandler handler = BundleUtils.getOsgiService(UsersHandler.class, null);
         if (handler == null) {
             LOGGER.error("UsersHandler service is not available");
@@ -46,7 +54,8 @@ public class BulkCreateUsersMutationExtension {
             return handler.importUsers(csvContent, sep, site, selectedColumns, Boolean.TRUE.equals(overwrite));
         } catch (Exception e) {
             LOGGER.error("Error during bulk user import", e);
-            return new BulkCreateUsersResult(false, 0, 0, 0, 1, Collections.singletonList(e.getMessage()));
+            return new BulkCreateUsersResult(false, 0, 0, 0, 1,
+                    Collections.singletonList("Internal error during bulk user import"));
         }
     }
 }

@@ -31,13 +31,31 @@ public class UsersHandler {
     // Matches each [groupName] token in the groups cell
     private static final Pattern GROUP_PATTERN = Pattern.compile("\\[([^\\]]+)\\]");
 
+    // Group names that grant administrative privileges - assignment is refused regardless of the caller's permissions.
+    // Names are compared lower-case against the resolved JCR group name (not the CSV value).
+    private static final Set<String> DENIED_GROUPS = new HashSet<>(Arrays.asList(
+            "administrators", "server-administrators", "root-administrators",
+            "site-administrators", "system-administrators", "compliance-managers"));
+
+    // User-node properties that must never be written from CSV input.
+    // Includes role/permission grants, account-lock flips, external-account flags, and the password field
+    // (which createUser handles via its dedicated parameter, never via setProperty).
+    private static final Set<String> DENIED_PROPERTIES = new HashSet<>(Arrays.asList(
+            JCRUserNode.J_PASSWORD, Constants.NODENAME,
+            "j:accountLocked", "j:external", "j:externalSource",
+            "j:roles", "j:permissions"));
+    private static final String[] DENIED_PROPERTY_PREFIXES = {"jcr:", "j:rolesIn", "j:account"};
+
+    // Maximum number of characters echoed into a log line for attacker-controlled fields.
+    private static final int LOG_FIELD_MAX_LEN = 200;
+
     private JahiaUserManagerService userManagerService;
     private JahiaGroupManagerService groupManagerService;
 
     public BulkCreateUsersResult importUsers(final String csvContent, final String separator,
             final String siteKey, final List<String> selectedColumns, final boolean overwrite) throws RepositoryException {
         if (siteKey != null) {
-            LOGGER.info("Bulk adding users for site: {}", siteKey);
+            LOGGER.info("Bulk adding users for site: {}", sanitizeForLog(siteKey));
         }
         final long start = System.currentTimeMillis();
         final int[] counts = {0, 0, 0, 0}; // [created, skipped, error, updated]
@@ -99,6 +117,11 @@ public class UsersHandler {
     private int processUser(String[] row, List<String> headerList, int userIdx, int passIdx,
             int groupIdx, String siteKey, JCRSessionWrapper session, List<String> errors,
             Set<String> allowedColumns, boolean overwrite) {
+        if (userIdx >= row.length || passIdx >= row.length) {
+            LOGGER.warn("Skipping malformed CSV row: fewer cells than required columns");
+            errors.add("Malformed row: fewer cells than required columns");
+            return -1;
+        }
         final List<String> values = Arrays.asList(row);
         final String username = values.get(userIdx);
         final String password = values.get(passIdx);
@@ -108,22 +131,23 @@ public class UsersHandler {
         try {
             props = buildProperties(headerList, values, allowedColumns);
         } catch (IllegalArgumentException ex) {
-            LOGGER.error("Skipping user due to invalid data: {}", ex.getMessage());
-            errors.add("Row for '" + username + "': " + ex.getMessage());
+            LOGGER.error("Skipping user due to invalid data: {}", sanitizeForLog(ex.getMessage()));
+            errors.add("Row for '" + sanitizeForLog(username) + "': " + ex.getMessage());
             return -1;
         }
 
         final boolean assignGroups = groupIdx >= 0 && (allowedColumns == null || allowedColumns.contains("groups"));
         final JCRUserNode existing = userManagerService.lookupUser(username, siteKey, session);
         if (existing != null) {
-            if (overwrite && !"root".equals(username)) {
+            final boolean isRoot = "root".equalsIgnoreCase(existing.getName());
+            if (overwrite && !isRoot) {
                 try {
                     for (final Map.Entry<Object, Object> entry : props.entrySet()) {
                         existing.setProperty((String) entry.getKey(), (String) entry.getValue());
                     }
                 } catch (RepositoryException e) {
-                    LOGGER.error("Failed to update properties for user {}: {}", username, e.getMessage());
-                    errors.add("Failed to update user: " + username);
+                    LOGGER.error("Failed to update properties for user {}: {}", sanitizeForLog(username), e.getMessage());
+                    errors.add("Failed to update user: " + sanitizeForLog(username));
                     return -1;
                 }
                 if (assignGroups) {
@@ -137,28 +161,32 @@ public class UsersHandler {
             return 1; // skipped
         }
         if (!userManagerService.isUsernameSyntaxCorrect(username)) {
-            LOGGER.error("Invalid username syntax: {}", username);
-            errors.add("Invalid username syntax: " + username);
+            LOGGER.error("Invalid username syntax: {}", sanitizeForLog(username));
+            errors.add("Invalid username syntax: " + sanitizeForLog(username));
             return -1;
         }
         final JCRUserNode created = userManagerService.createUser(username, siteKey, password, props, session);
         if (created != null) {
-            LOGGER.info("Created user: {}", username);
+            LOGGER.info("Created user: {}", sanitizeForLog(username));
             if (assignGroups) {
                 addUserToGroups(created, groups, siteKey, session);
             }
             return 0;
         }
-        LOGGER.error("Failed to create user: {}", username);
-        errors.add("Failed to create user: " + username);
+        LOGGER.error("Failed to create user: {}", sanitizeForLog(username));
+        errors.add("Failed to create user: " + sanitizeForLog(username));
         return -1;
     }
 
     private Properties buildProperties(List<String> headers, List<String> values, Set<String> allowedColumns) {
         final Properties props = new Properties();
         for (int i = 0; i < headers.size(); i++) {
-            final String key = headers.get(i);
-            if (Constants.NODENAME.equals(key) || JCRUserNode.J_PASSWORD.equals(key) || "groups".equals(key)) {
+            final String rawKey = headers.get(i);
+            final String key = rawKey == null ? "" : rawKey.trim();
+            if (key.isEmpty() || "groups".equals(key)) {
+                continue;
+            }
+            if (isPropertyDenied(key)) {
                 continue;
             }
             if (allowedColumns != null && !allowedColumns.contains(key)) {
@@ -171,9 +199,21 @@ public class UsersHandler {
                 }
                 continue;
             }
-            props.setProperty(key.trim(), values.get(i));
+            props.setProperty(key, values.get(i));
         }
         return props;
+    }
+
+    private static boolean isPropertyDenied(String key) {
+        if (DENIED_PROPERTIES.contains(key)) {
+            return true;
+        }
+        for (String prefix : DENIED_PROPERTY_PREFIXES) {
+            if (key.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void addUserToGroups(JCRUserNode user, String groups, String siteKey, JCRSessionWrapper session) {
@@ -183,16 +223,32 @@ public class UsersHandler {
         final Matcher matcher = GROUP_PATTERN.matcher(groups);
         while (matcher.find()) {
             final String groupName = matcher.group(1).trim();
-            if (!groupName.isEmpty()) {
-                final JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, groupName, session);
-                if (jahiaGroup != null) {
-                    jahiaGroup.addMember(user);
-                    LOGGER.info("Added user {} to group {}", user.getName(), groupName);
-                } else {
-                    LOGGER.warn("Group {} not found{}", groupName, siteKey != null ? " for site " + siteKey : "");
-                }
+            if (groupName.isEmpty()) {
+                continue;
             }
+            final JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, groupName, session);
+            if (jahiaGroup == null) {
+                LOGGER.warn("Group {} not found{}", sanitizeForLog(groupName),
+                        siteKey != null ? " for site " + sanitizeForLog(siteKey) : "");
+                continue;
+            }
+            // Compare against the resolved JCR name so a CSV alias cannot bypass the denylist.
+            if (DENIED_GROUPS.contains(jahiaGroup.getName().toLowerCase(Locale.ROOT))) {
+                LOGGER.warn("Refusing to add user {} to privileged group {}",
+                        sanitizeForLog(user.getName()), sanitizeForLog(jahiaGroup.getName()));
+                continue;
+            }
+            jahiaGroup.addMember(user);
+            LOGGER.info("Added user {} to group {}", sanitizeForLog(user.getName()), sanitizeForLog(jahiaGroup.getName()));
         }
+    }
+
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return null;
+        }
+        final String stripped = value.replaceAll("[\\r\\n\\t]", "_");
+        return stripped.length() <= LOG_FIELD_MAX_LEN ? stripped : stripped.substring(0, LOG_FIELD_MAX_LEN) + "...";
     }
 
     @Reference
