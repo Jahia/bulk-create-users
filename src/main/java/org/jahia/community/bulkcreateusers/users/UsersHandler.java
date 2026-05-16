@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.jahia.api.Constants;
 
 import javax.jcr.RepositoryException;
+import java.io.IOException;
 import java.io.StringReader;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -24,6 +25,11 @@ import java.util.regex.Pattern;
 public class UsersHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UsersHandler.class);
+
+    private static final int RESULT_CREATED = 0;
+    private static final int RESULT_SKIPPED = 1;
+    private static final int RESULT_UPDATED = 2;
+    private static final int RESULT_ERROR = -1;
 
     // Properties that must have a value in every row
     private static final Set<String> REQUIRED_PROPERTY_COLUMNS = new HashSet<>(Arrays.asList("j:firstName", "j:lastName"));
@@ -55,128 +61,149 @@ public class UsersHandler {
     public BulkCreateUsersResult importUsers(final String csvContent, final String separator,
             final String siteKey, final List<String> selectedColumns, final boolean overwrite) throws RepositoryException {
         if (siteKey != null) {
-            LOGGER.info("Bulk adding users for site: {}", sanitizeForLog(siteKey));
+            LOGGER.info("Bulk adding users for site: {}", lazy(siteKey));
         }
         final long start = System.currentTimeMillis();
         final int[] counts = {0, 0, 0, 0}; // [created, skipped, error, updated]
         final List<String> errors = new ArrayList<>();
+        final ImportRequest request = new ImportRequest(csvContent, separator, siteKey,
+                buildAllowedColumns(selectedColumns), overwrite);
+
+        JCRTemplate.getInstance().doExecuteWithSystemSession(session -> {
+            runImport(session, request, counts, errors);
+            return null;
+        });
+
+        LOGGER.info("Bulk user import completed in {} ms — created={}, skipped={}, errors={}",
+                System.currentTimeMillis() - start, counts[0], counts[1], counts[2]);
+        return new BulkCreateUsersResult(counts[2] == 0, counts[0], counts[3], counts[1], counts[2], errors);
+    }
+
+    private static Set<String> buildAllowedColumns(List<String> selectedColumns) {
         // Restrictive by default: when no selectedColumns is provided, only the required user properties
         // are written. Callers must opt in explicitly to import any other column.
         final Set<String> allowedColumns = new HashSet<>(REQUIRED_PROPERTY_COLUMNS);
         if (selectedColumns != null) {
             allowedColumns.addAll(selectedColumns);
         }
-
-        JCRTemplate.getInstance().doExecuteWithSystemSession(session -> {
-            try (CSVReader reader = new CSVReader(new StringReader(csvContent), separator.charAt(0), '"')) {
-                final String[] headers = reader.readNext();
-                if (headers == null) {
-                    LOGGER.error("Missing headers in CSV file");
-                    counts[2]++;
-                    errors.add("Missing headers in CSV file");
-                    return null;
-                }
-                final List<String> headerList = Arrays.asList(headers);
-                final int userIdx = headerList.indexOf(Constants.NODENAME);
-                final int passIdx = headerList.indexOf(JCRUserNode.J_PASSWORD);
-                final int groupIdx = headerList.indexOf("groups");
-                if (userIdx < 0 || passIdx < 0) {
-                    LOGGER.error("Invalid CSV: missing required columns j:nodename or j:password");
-                    counts[2]++;
-                    errors.add("Invalid CSV: missing required columns j:nodename or j:password");
-                    return null;
-                }
-
-                String[] row;
-                while ((row = reader.readNext()) != null) {
-                    final int result = processUser(row, headerList, userIdx, passIdx, groupIdx, siteKey, session, errors, allowedColumns, overwrite);
-                    final int committed = commitRow(session, result, errors);
-                    if (committed == 0) {
-                        counts[0]++;
-                    } else if (committed == 1) {
-                        counts[1]++;
-                    } else if (committed == 2) {
-                        counts[3]++;
-                    } else {
-                        counts[2]++;
-                    }
-                }
-            } catch (Exception e) {
-                LOGGER.error("Error during bulk user creation", e);
-                counts[2]++;
-                errors.add("Fatal error: " + e.getMessage());
-            }
-            return null;
-        });
-
-        LOGGER.info("Bulk user import completed in {} ms — created={}, skipped={}, errors={}", System.currentTimeMillis() - start, counts[0], counts[1], counts[2]);
-        return new BulkCreateUsersResult(counts[2] == 0, counts[0], counts[3], counts[1], counts[2], errors);
+        return allowedColumns;
     }
 
-    private int processUser(String[] row, List<String> headerList, int userIdx, int passIdx,
-            int groupIdx, String siteKey, JCRSessionWrapper session, List<String> errors,
-            Set<String> allowedColumns, boolean overwrite) {
-        if (userIdx >= row.length || passIdx >= row.length) {
+    private void runImport(JCRSessionWrapper session, ImportRequest request, int[] counts, List<String> errors) {
+        try (CSVReader reader = new CSVReader(new StringReader(request.csvContent), request.separator.charAt(0), '"')) {
+            final String[] headers = reader.readNext();
+            if (headers == null) {
+                LOGGER.error("Missing headers in CSV file");
+                counts[2]++;
+                errors.add("Missing headers in CSV file");
+                return;
+            }
+            final CsvLayout layout = CsvLayout.from(headers);
+            if (layout == null) {
+                LOGGER.error("Invalid CSV: missing required columns j:nodename or j:password");
+                counts[2]++;
+                errors.add("Invalid CSV: missing required columns j:nodename or j:password");
+                return;
+            }
+            processRows(reader, new RowContext(request, layout, session, errors), counts);
+        } catch (IOException e) {
+            LOGGER.error("Error during bulk user creation", e);
+            counts[2]++;
+            errors.add("Fatal error: " + e.getMessage());
+        }
+    }
+
+    private void processRows(CSVReader reader, RowContext ctx, int[] counts) throws IOException {
+        String[] row;
+        while ((row = reader.readNext()) != null) {
+            final int result = processUser(row, ctx);
+            tally(counts, commitRow(ctx.session, result, ctx.errors));
+        }
+    }
+
+    private static void tally(int[] counts, int committed) {
+        switch (committed) {
+            case RESULT_CREATED: counts[0]++; break;
+            case RESULT_SKIPPED: counts[1]++; break;
+            case RESULT_UPDATED: counts[3]++; break;
+            default: counts[2]++; break;
+        }
+    }
+
+    private int processUser(String[] row, RowContext ctx) {
+        final CsvLayout layout = ctx.layout;
+        if (layout.userIdx >= row.length || layout.passIdx >= row.length) {
             LOGGER.warn("Skipping malformed CSV row: fewer cells than required columns");
-            errors.add("Malformed row: fewer cells than required columns");
-            return -1;
+            ctx.errors.add("Malformed row: fewer cells than required columns");
+            return RESULT_ERROR;
         }
         final List<String> values = Arrays.asList(row);
-        final String username = values.get(userIdx);
-        final String password = values.get(passIdx);
-        final String groups = (groupIdx >= 0 && groupIdx < values.size()) ? values.get(groupIdx) : null;
+        final String username = values.get(layout.userIdx);
+        final String password = values.get(layout.passIdx);
+        final String groups = (layout.groupIdx >= 0 && layout.groupIdx < values.size()) ? values.get(layout.groupIdx) : null;
 
-        Properties props;
-        try {
-            props = buildProperties(headerList, values, allowedColumns);
-        } catch (IllegalArgumentException ex) {
-            LOGGER.error("Skipping user due to invalid data: {}", sanitizeForLog(ex.getMessage()));
-            errors.add("Row for '" + sanitizeForLog(username) + "': " + ex.getMessage());
-            return -1;
+        final Properties props = buildPropertiesOrReport(values, ctx, username);
+        if (props == null) {
+            return RESULT_ERROR;
         }
 
-        // The "groups" column is a reserved, special-cased column - honored whenever present
-        // in the CSV, independent of selectedColumns.
-        final boolean assignGroups = groupIdx >= 0;
-        final JCRUserNode existing = userManagerService.lookupUser(username, siteKey, session);
+        final JCRUserNode existing = userManagerService.lookupUser(username, ctx.request.siteKey, ctx.session);
         if (existing != null) {
-            final boolean isRoot = "root".equalsIgnoreCase(existing.getName());
-            if (overwrite && !isRoot) {
-                try {
-                    for (final Map.Entry<Object, Object> entry : props.entrySet()) {
-                        existing.setProperty((String) entry.getKey(), (String) entry.getValue());
-                    }
-                } catch (RepositoryException e) {
-                    LOGGER.error("Failed to update properties for user {}: {}", sanitizeForLog(username), e.getMessage());
-                    errors.add("Failed to update user: " + sanitizeForLog(username));
-                    return -1;
-                }
-                if (assignGroups) {
-                    addUserToGroups(existing, groups, siteKey, session);
-                }
-                return 2; // updated
-            }
-            if (assignGroups) {
-                addUserToGroups(existing, groups, siteKey, session);
-            }
-            return 1; // skipped
+            return handleExistingUser(existing, props, groups, ctx);
         }
+        return handleNewUser(username, password, props, groups, ctx);
+    }
+
+    private Properties buildPropertiesOrReport(List<String> values, RowContext ctx, String username) {
+        try {
+            return buildProperties(ctx.layout.headers, values, ctx.request.allowedColumns);
+        } catch (IllegalArgumentException ex) {
+            LOGGER.error("Skipping user due to invalid data: {}", lazy(ex.getMessage()));
+            ctx.errors.add("Row for '" + sanitizeForLog(username) + "': " + ex.getMessage());
+            return null;
+        }
+    }
+
+    private int handleExistingUser(JCRUserNode existing, Properties props, String groups, RowContext ctx) {
+        final boolean canAssignGroups = ctx.layout.groupIdx >= 0;
+        if (ctx.request.overwrite && !"root".equalsIgnoreCase(existing.getName())) {
+            try {
+                for (final Map.Entry<Object, Object> entry : props.entrySet()) {
+                    existing.setProperty((String) entry.getKey(), (String) entry.getValue());
+                }
+            } catch (RepositoryException e) {
+                LOGGER.error("Failed to update properties for user {}: {}", lazy(existing.getName()), e.getMessage());
+                ctx.errors.add("Failed to update user: " + sanitizeForLog(existing.getName()));
+                return RESULT_ERROR;
+            }
+            if (canAssignGroups) {
+                addUserToGroups(existing, groups, ctx.request.siteKey, ctx.session);
+            }
+            return RESULT_UPDATED;
+        }
+        if (canAssignGroups) {
+            addUserToGroups(existing, groups, ctx.request.siteKey, ctx.session);
+        }
+        return RESULT_SKIPPED;
+    }
+
+    private int handleNewUser(String username, String password, Properties props, String groups, RowContext ctx) {
         if (!userManagerService.isUsernameSyntaxCorrect(username)) {
-            LOGGER.error("Invalid username syntax: {}", sanitizeForLog(username));
-            errors.add("Invalid username syntax: " + sanitizeForLog(username));
-            return -1;
+            LOGGER.error("Invalid username syntax: {}", lazy(username));
+            ctx.errors.add("Invalid username syntax: " + sanitizeForLog(username));
+            return RESULT_ERROR;
         }
-        final JCRUserNode created = userManagerService.createUser(username, siteKey, password, props, session);
-        if (created != null) {
-            LOGGER.info("Created user: {}", sanitizeForLog(username));
-            if (assignGroups) {
-                addUserToGroups(created, groups, siteKey, session);
-            }
-            return 0;
+        final JCRUserNode created = userManagerService.createUser(username, ctx.request.siteKey, password, props, ctx.session);
+        if (created == null) {
+            LOGGER.error("Failed to create user: {}", lazy(username));
+            ctx.errors.add("Failed to create user: " + sanitizeForLog(username));
+            return RESULT_ERROR;
         }
-        LOGGER.error("Failed to create user: {}", sanitizeForLog(username));
-        errors.add("Failed to create user: " + sanitizeForLog(username));
-        return -1;
+        LOGGER.info("Created user: {}", lazy(username));
+        if (ctx.layout.groupIdx >= 0) {
+            addUserToGroups(created, groups, ctx.request.siteKey, ctx.session);
+        }
+        return RESULT_CREATED;
     }
 
     /**
@@ -185,31 +212,31 @@ public class UsersHandler {
      * back via {@code refresh(false)} and the row is reported as an error.
      */
     private int commitRow(JCRSessionWrapper session, int result, List<String> errors) {
-        if (result == 1) { // skipped, nothing staged
+        if (result == RESULT_SKIPPED) {
             return result;
         }
-        if (result < 0) {
+        if (result == RESULT_ERROR) {
             // Some row-level failure paths (e.g. setProperty mid-overwrite) may leave partial mutations
             // staged - discard them before processing the next row.
-            try {
-                session.refresh(false);
-            } catch (RepositoryException ignored) {
-                // refresh failure cannot worsen the result we already report
-            }
+            safeRefresh(session);
             return result;
         }
         try {
             session.save();
             return result;
         } catch (RepositoryException e) {
-            LOGGER.error("Failed to commit row: {}", sanitizeForLog(e.getMessage()));
+            LOGGER.error("Failed to commit row: {}", lazy(e.getMessage()));
             errors.add("Failed to commit row");
-            try {
-                session.refresh(false);
-            } catch (RepositoryException ignored) {
-                // ignore
-            }
-            return -1;
+            safeRefresh(session);
+            return RESULT_ERROR;
+        }
+    }
+
+    private static void safeRefresh(JCRSessionWrapper session) {
+        try {
+            session.refresh(false);
+        } catch (RepositoryException ignored) {
+            // refresh failure cannot worsen the result we already report
         }
     }
 
@@ -218,25 +245,23 @@ public class UsersHandler {
         for (int i = 0; i < headers.size(); i++) {
             final String rawKey = headers.get(i);
             final String key = rawKey == null ? "" : rawKey.trim();
-            if (key.isEmpty() || "groups".equals(key)) {
-                continue;
-            }
-            if (isPropertyDenied(key)) {
-                continue;
-            }
-            if (allowedColumns != null && !allowedColumns.contains(key)) {
-                continue;
-            }
-            final boolean isEmpty = i >= values.size() || values.get(i) == null || values.get(i).trim().isEmpty();
-            if (isEmpty) {
-                if (REQUIRED_PROPERTY_COLUMNS.contains(key)) {
+            if (isWritableColumn(key, allowedColumns)) {
+                final String value = i < values.size() ? values.get(i) : null;
+                if (value != null && !value.trim().isEmpty()) {
+                    props.setProperty(key, value);
+                } else if (REQUIRED_PROPERTY_COLUMNS.contains(key)) {
                     throw new IllegalArgumentException("Empty value for required column: " + key);
                 }
-                continue;
             }
-            props.setProperty(key, values.get(i));
         }
         return props;
+    }
+
+    private static boolean isWritableColumn(String key, Set<String> allowedColumns) {
+        if (key.isEmpty() || "groups".equals(key) || isPropertyDenied(key)) {
+            return false;
+        }
+        return allowedColumns == null || allowedColumns.contains(key);
     }
 
     private static boolean isPropertyDenied(String key) {
@@ -258,24 +283,40 @@ public class UsersHandler {
         final Matcher matcher = GROUP_PATTERN.matcher(groups);
         while (matcher.find()) {
             final String groupName = matcher.group(1).trim();
-            if (groupName.isEmpty()) {
-                continue;
+            if (!groupName.isEmpty()) {
+                tryAddToGroup(user, groupName, siteKey, session);
             }
-            final JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, groupName, session);
-            if (jahiaGroup == null) {
-                LOGGER.warn("Group {} not found{}", sanitizeForLog(groupName),
-                        siteKey != null ? " for site " + sanitizeForLog(siteKey) : "");
-                continue;
-            }
-            // Compare against the resolved JCR name so a CSV alias cannot bypass the denylist.
-            if (DENIED_GROUPS.contains(jahiaGroup.getName().toLowerCase(Locale.ROOT))) {
-                LOGGER.warn("Refusing to add user {} to privileged group {}",
-                        sanitizeForLog(user.getName()), sanitizeForLog(jahiaGroup.getName()));
-                continue;
-            }
-            jahiaGroup.addMember(user);
-            LOGGER.info("Added user {} to group {}", sanitizeForLog(user.getName()), sanitizeForLog(jahiaGroup.getName()));
         }
+    }
+
+    private void tryAddToGroup(JCRUserNode user, String groupName, String siteKey, JCRSessionWrapper session) {
+        final JCRGroupNode jahiaGroup = groupManagerService.lookupGroup(siteKey, groupName, session);
+        if (jahiaGroup == null) {
+            LOGGER.warn("Group {} not found{}", lazy(groupName),
+                    siteKey != null ? " for site " + sanitizeForLog(siteKey) : "");
+            return;
+        }
+        // Compare against the resolved JCR name so a CSV alias cannot bypass the denylist.
+        if (DENIED_GROUPS.contains(jahiaGroup.getName().toLowerCase(Locale.ROOT))) {
+            LOGGER.warn("Refusing to add user {} to privileged group {}",
+                    lazy(user.getName()), lazy(jahiaGroup.getName()));
+            return;
+        }
+        jahiaGroup.addMember(user);
+        LOGGER.info("Added user {} to group {}", lazy(user.getName()), lazy(jahiaGroup.getName()));
+    }
+
+    /**
+     * Defers {@link #sanitizeForLog(String)} until the logger actually formats the message,
+     * avoiding the work when the corresponding log level is disabled (rule java:S2629).
+     */
+    private static Object lazy(final String value) {
+        return new Object() {
+            @Override
+            public String toString() {
+                return sanitizeForLog(value);
+            }
+        };
     }
 
     private static String sanitizeForLog(String value) {
@@ -284,6 +325,63 @@ public class UsersHandler {
         }
         final String stripped = value.replaceAll("[\\r\\n\\t]", "_");
         return stripped.length() <= LOG_FIELD_MAX_LEN ? stripped : stripped.substring(0, LOG_FIELD_MAX_LEN) + "...";
+    }
+
+    /** Immutable inputs of a single import invocation. */
+    private static final class ImportRequest {
+        final String csvContent;
+        final String separator;
+        final String siteKey;
+        final Set<String> allowedColumns;
+        final boolean overwrite;
+
+        ImportRequest(String csvContent, String separator, String siteKey, Set<String> allowedColumns, boolean overwrite) {
+            this.csvContent = csvContent;
+            this.separator = separator;
+            this.siteKey = siteKey;
+            this.allowedColumns = allowedColumns;
+            this.overwrite = overwrite;
+        }
+    }
+
+    /** Parsed CSV header layout: column list plus the indices we care about. */
+    private static final class CsvLayout {
+        final List<String> headers;
+        final int userIdx;
+        final int passIdx;
+        final int groupIdx;
+
+        private CsvLayout(List<String> headers, int userIdx, int passIdx, int groupIdx) {
+            this.headers = headers;
+            this.userIdx = userIdx;
+            this.passIdx = passIdx;
+            this.groupIdx = groupIdx;
+        }
+
+        static CsvLayout from(String[] headers) {
+            final List<String> headerList = Arrays.asList(headers);
+            final int userIdx = headerList.indexOf(Constants.NODENAME);
+            final int passIdx = headerList.indexOf(JCRUserNode.J_PASSWORD);
+            if (userIdx < 0 || passIdx < 0) {
+                return null;
+            }
+            return new CsvLayout(headerList, userIdx, passIdx, headerList.indexOf("groups"));
+        }
+    }
+
+    /** Per-row carrier so row-level helpers stay below the parameter-count ceiling. */
+    private static final class RowContext {
+        final ImportRequest request;
+        final CsvLayout layout;
+        final JCRSessionWrapper session;
+        final List<String> errors;
+
+        RowContext(ImportRequest request, CsvLayout layout, JCRSessionWrapper session, List<String> errors) {
+            this.request = request;
+            this.layout = layout;
+            this.session = session;
+            this.errors = errors;
+        }
     }
 
     @Reference
