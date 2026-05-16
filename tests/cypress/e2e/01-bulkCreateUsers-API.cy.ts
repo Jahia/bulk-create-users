@@ -184,6 +184,55 @@ describe('Bulk Create Users', () => {
                 });
         });
 
+        it('imports only required properties when selectedColumns is omitted', () => {
+            // Safer default: with no explicit selectedColumns, optional CSV columns
+            // (here j:email) must not be written. The import itself must still succeed
+            // because the required columns are picked up automatically.
+            deleteTestUsers();
+            cy.apollo({
+                mutation: importUsers,
+                variables: {csvContent: CSV_WITH_EMAIL, separator: ','}
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.success).to.be.true;
+                    expect(result.createdCount).to.eq(2);
+                    expect(result.errorCount).to.eq(0);
+                });
+        });
+
+        it('imports only required properties when selectedColumns is an empty array', () => {
+            deleteTestUsers();
+            cy.apollo({
+                mutation: importUsers,
+                variables: {csvContent: CSV_WITH_EMAIL, separator: ',', selectedColumns: []}
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.success).to.be.true;
+                    expect(result.createdCount).to.eq(2);
+                });
+        });
+
+        it('continues processing remaining rows when one row is malformed', () => {
+            // L3 isolation: a short/invalid row must not abort the whole import.
+            deleteTestUsers();
+            const csvWithBadRow = 'j:nodename,j:password,j:firstName,j:lastName\n'
+                + 'bcu-test-user1,TestPass1234!,Alice,Smith\n'
+                + 'truncated-row\n'
+                + 'bcu-test-user2,TestPass1234!,Bob,Jones';
+            cy.apollo({
+                mutation: importUsers,
+                variables: {csvContent: csvWithBadRow, separator: ',', selectedColumns: REQUIRED_COLUMNS}
+            })
+                .its('data.bulkCreateUsersImport')
+                .should(result => {
+                    expect(result.createdCount).to.eq(2);
+                    expect(result.errorCount).to.be.greaterThan(0);
+                    expect(result.success).to.be.false;
+                });
+        });
+
         it('never overwrites the root user even when overwrite is true', () => {
             const csvWithRoot = 'j:nodename,j:password,j:firstName,j:lastName\nroot,TestPass1234!,Hacked,Root';
             cy.apollo({

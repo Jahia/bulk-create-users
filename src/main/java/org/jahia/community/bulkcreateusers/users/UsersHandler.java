@@ -60,8 +60,12 @@ public class UsersHandler {
         final long start = System.currentTimeMillis();
         final int[] counts = {0, 0, 0, 0}; // [created, skipped, error, updated]
         final List<String> errors = new ArrayList<>();
-        final Set<String> allowedColumns = (selectedColumns != null && !selectedColumns.isEmpty())
-                ? new HashSet<>(selectedColumns) : null;
+        // Restrictive by default: when no selectedColumns is provided, only the required user properties
+        // are written. Callers must opt in explicitly to import any other column.
+        final Set<String> allowedColumns = new HashSet<>(REQUIRED_PROPERTY_COLUMNS);
+        if (selectedColumns != null) {
+            allowedColumns.addAll(selectedColumns);
+        }
 
         JCRTemplate.getInstance().doExecuteWithSystemSession(session -> {
             try (CSVReader reader = new CSVReader(new StringReader(csvContent), separator.charAt(0), '"')) {
@@ -83,25 +87,20 @@ public class UsersHandler {
                     return null;
                 }
 
-                int batch = 0;
                 String[] row;
                 while ((row = reader.readNext()) != null) {
-                    if (batch++ == 100) {
-                        session.save();
-                        batch = 1;
-                    }
                     final int result = processUser(row, headerList, userIdx, passIdx, groupIdx, siteKey, session, errors, allowedColumns, overwrite);
-                    if (result == 0) {
+                    final int committed = commitRow(session, result, errors);
+                    if (committed == 0) {
                         counts[0]++;
-                    } else if (result == 1) {
+                    } else if (committed == 1) {
                         counts[1]++;
-                    } else if (result == 2) {
+                    } else if (committed == 2) {
                         counts[3]++;
                     } else {
                         counts[2]++;
                     }
                 }
-                session.save();
             } catch (Exception e) {
                 LOGGER.error("Error during bulk user creation", e);
                 counts[2]++;
@@ -136,7 +135,9 @@ public class UsersHandler {
             return -1;
         }
 
-        final boolean assignGroups = groupIdx >= 0 && (allowedColumns == null || allowedColumns.contains("groups"));
+        // The "groups" column is a reserved, special-cased column - honored whenever present
+        // in the CSV, independent of selectedColumns.
+        final boolean assignGroups = groupIdx >= 0;
         final JCRUserNode existing = userManagerService.lookupUser(username, siteKey, session);
         if (existing != null) {
             final boolean isRoot = "root".equalsIgnoreCase(existing.getName());
@@ -176,6 +177,40 @@ public class UsersHandler {
         LOGGER.error("Failed to create user: {}", sanitizeForLog(username));
         errors.add("Failed to create user: " + sanitizeForLog(username));
         return -1;
+    }
+
+    /**
+     * Per-row commit boundary: skipped rows need no save; processed rows are persisted individually
+     * so that a single failure cannot poison the whole import. On commit failure the session is rolled
+     * back via {@code refresh(false)} and the row is reported as an error.
+     */
+    private int commitRow(JCRSessionWrapper session, int result, List<String> errors) {
+        if (result == 1) { // skipped, nothing staged
+            return result;
+        }
+        if (result < 0) {
+            // Some row-level failure paths (e.g. setProperty mid-overwrite) may leave partial mutations
+            // staged - discard them before processing the next row.
+            try {
+                session.refresh(false);
+            } catch (RepositoryException ignored) {
+                // refresh failure cannot worsen the result we already report
+            }
+            return result;
+        }
+        try {
+            session.save();
+            return result;
+        } catch (RepositoryException e) {
+            LOGGER.error("Failed to commit row: {}", sanitizeForLog(e.getMessage()));
+            errors.add("Failed to commit row");
+            try {
+                session.refresh(false);
+            } catch (RepositoryException ignored) {
+                // ignore
+            }
+            return -1;
+        }
     }
 
     private Properties buildProperties(List<String> headers, List<String> values, Set<String> allowedColumns) {
