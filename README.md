@@ -7,8 +7,8 @@ A Jahia community module that provides a UI and GraphQL API to bulk-create users
 - Bulk user creation from a CSV file via a React admin UI
 - Column selection: choose which optional properties to import per run
 - Group assignment using `[group1],[group2]` bracket notation
-- Skips existing users (increments skipped count) instead of failing
-- Detailed import result: created, skipped, error counts and per-row error messages
+- Optional `overwrite` flag: when enabled, properties of existing users are updated; otherwise existing users are skipped (the `root` user is always skipped regardless of the flag)
+- Detailed import result: created, updated, skipped, error counts and per-row error messages
 - Max upload size enforced from Jahia's own `SettingsBean` configuration
 - GraphQL mutation API (`bulkCreateUsersImport`) for programmatic imports
 - Site-scoped or global user creation
@@ -73,10 +73,12 @@ mutation {
     csvContent: "...",
     separator: ",",
     siteKey: "mySite",          # omit for global users
-    selectedColumns: ["j:firstName", "j:lastName", "j:email", "groups"]
+    selectedColumns: ["j:firstName", "j:lastName", "j:email", "groups"],
+    overwrite: false            # when true, update existing users instead of skipping (root is always skipped)
   ) {
     success
     createdCount
+    updatedCount
     skippedCount
     errorCount
     errors
