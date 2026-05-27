@@ -37,11 +37,28 @@ public class UsersHandler {
     // Matches each [groupName] token in the groups cell
     private static final Pattern GROUP_PATTERN = Pattern.compile("\\[([^\\]]+)\\]");
 
-    // Group names that grant administrative privileges - assignment is refused regardless of the caller's permissions.
-    // Names are compared lower-case against the resolved JCR group name (not the CSV value).
+    // Group names that grant administrative OR platform/site editing privileges - assignment is refused
+    // regardless of the caller's permissions. "privileged" / "site-privileged" are Jahia's built-in groups
+    // that grant author/edit access across the platform or a site, so they are as dangerous to hand out in
+    // bulk as the administrator groups. Names are compared lower-case against the resolved JCR group name
+    // (not the CSV value).
     private static final Set<String> DENIED_GROUPS = new HashSet<>(Arrays.asList(
             "administrators", "server-administrators", "root-administrators",
-            "site-administrators", "system-administrators", "compliance-managers"));
+            "site-administrators", "system-administrators", "compliance-managers",
+            "privileged", "site-privileged"));
+
+    // Server-level group whose members are treated as protected super-users: their accounts are never
+    // overwritten by a bulk import, even when the overwrite flag is set (defends a renamed "root").
+    private static final String SUPER_USER_GROUP = "administrators";
+
+    // Hard ceiling on the number of CSV data rows processed in a single import. Bounds the synchronous,
+    // system-session workload (one createUser + save per row) independently of the byte-size limit.
+    private static final int MAX_ROWS = 100_000;
+
+    // A writable property key must match this shape: a Jahia/JCR-style name, optionally namespaced.
+    // Rejecting anything else stops control characters, whitespace, or path-like tokens from ever
+    // reaching setProperty / createUser as a property name.
+    private static final Pattern SAFE_PROPERTY_NAME = Pattern.compile("[A-Za-z][A-Za-z0-9_]*(:[A-Za-z][A-Za-z0-9_]*)?");
 
     // User-node properties that must never be written from CSV input.
     // Includes role/permission grants, account-lock flips, external-account flags, and the password field
@@ -115,7 +132,14 @@ public class UsersHandler {
 
     private void processRows(CSVReader reader, RowContext ctx, int[] counts) throws IOException {
         String[] row;
+        int rowCount = 0;
         while ((row = reader.readNext()) != null) {
+            if (++rowCount > MAX_ROWS) {
+                LOGGER.warn("Aborting bulk user import: CSV exceeds the maximum of {} data rows", MAX_ROWS);
+                ctx.errors.add("Import aborted: exceeded the maximum of " + MAX_ROWS + " rows");
+                counts[2]++;
+                return;
+            }
             final int result = processUser(row, ctx);
             tally(counts, commitRow(ctx.session, result, ctx.errors));
         }
@@ -166,7 +190,7 @@ public class UsersHandler {
 
     private int handleExistingUser(JCRUserNode existing, Properties props, String groups, RowContext ctx) {
         final boolean canAssignGroups = ctx.layout.groupIdx >= 0;
-        if (ctx.request.overwrite && !"root".equalsIgnoreCase(existing.getName())) {
+        if (ctx.request.overwrite && !isProtectedAccount(existing, ctx.session)) {
             try {
                 for (final Map.Entry<Object, Object> entry : props.entrySet()) {
                     existing.setProperty((String) entry.getKey(), (String) entry.getValue());
@@ -185,6 +209,26 @@ public class UsersHandler {
             addUserToGroups(existing, groups, ctx.request.siteKey, ctx.session);
         }
         return RESULT_SKIPPED;
+    }
+
+    /**
+     * A protected account is never overwritten by a bulk import, even with {@code overwrite=true}.
+     * Covers the built-in {@code root} super-user by name <em>and</em> any member of the server-level
+     * {@code administrators} group, so a renamed super-user is still shielded. On any lookup failure we
+     * fail closed (treat the account as protected) rather than risk overwriting a privileged user.
+     */
+    private boolean isProtectedAccount(JCRUserNode user, JCRSessionWrapper session) {
+        if ("root".equalsIgnoreCase(user.getName())) {
+            return true;
+        }
+        try {
+            final JCRGroupNode admins = groupManagerService.lookupGroup(null, SUPER_USER_GROUP, session);
+            return admins != null && admins.isMember(user);
+        } catch (RuntimeException e) {
+            LOGGER.warn("Treating user {} as protected: membership check failed: {}",
+                    lazy(user.getName()), e.getMessage());
+            return true;
+        }
     }
 
     private int handleNewUser(String username, String password, Properties props, String groups, RowContext ctx) {
@@ -257,14 +301,23 @@ public class UsersHandler {
         return props;
     }
 
-    private static boolean isWritableColumn(String key, Set<String> allowedColumns) {
-        if (key.isEmpty() || "groups".equals(key) || isPropertyDenied(key)) {
+    static boolean isWritableColumn(String key, Set<String> allowedColumns) {
+        if (key.isEmpty() || "groups".equals(key) || !isSafePropertyName(key) || isPropertyDenied(key)) {
             return false;
         }
         return allowedColumns == null || allowedColumns.contains(key);
     }
 
-    private static boolean isPropertyDenied(String key) {
+    /**
+     * True only for a well-formed Jahia/JCR property name (optionally namespaced, e.g. {@code j:firstName}).
+     * Guards against control characters, whitespace, and path-like tokens reaching {@code setProperty}
+     * or {@code createUser} as a property name, complementing the {@link #isPropertyDenied(String)} denylist.
+     */
+    static boolean isSafePropertyName(String key) {
+        return key != null && SAFE_PROPERTY_NAME.matcher(key).matches();
+    }
+
+    static boolean isPropertyDenied(String key) {
         if (DENIED_PROPERTIES.contains(key)) {
             return true;
         }
@@ -297,13 +350,22 @@ public class UsersHandler {
             return;
         }
         // Compare against the resolved JCR name so a CSV alias cannot bypass the denylist.
-        if (DENIED_GROUPS.contains(jahiaGroup.getName().toLowerCase(Locale.ROOT))) {
+        if (isGroupDenied(jahiaGroup.getName())) {
             LOGGER.warn("Refusing to add user {} to privileged group {}",
                     lazy(user.getName()), lazy(jahiaGroup.getName()));
             return;
         }
         jahiaGroup.addMember(user);
         LOGGER.info("Added user {} to group {}", lazy(user.getName()), lazy(jahiaGroup.getName()));
+    }
+
+    /**
+     * True when the resolved JCR group name denotes a privilege-granting group that must never be
+     * assigned via bulk import (administrators and Jahia's built-in privileged/site-privileged groups).
+     * Matching is case-insensitive against the resolved name to defeat CSV alias bypasses.
+     */
+    static boolean isGroupDenied(String resolvedGroupName) {
+        return resolvedGroupName != null && DENIED_GROUPS.contains(resolvedGroupName.toLowerCase(Locale.ROOT));
     }
 
     /**
