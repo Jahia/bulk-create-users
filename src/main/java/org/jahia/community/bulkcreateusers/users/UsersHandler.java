@@ -37,19 +37,19 @@ public class UsersHandler {
     // Matches each [groupName] token in the groups cell
     private static final Pattern GROUP_PATTERN = Pattern.compile("\\[([^\\]]+)\\]");
 
+    // Server-level group whose members are treated as protected super-users: their accounts are never
+    // overwritten by a bulk import, even when the overwrite flag is set (defends a renamed "root").
+    private static final String SUPER_USER_GROUP = "administrators";
+
     // Group names that grant administrative OR platform/site editing privileges - assignment is refused
     // regardless of the caller's permissions. "privileged" / "site-privileged" are Jahia's built-in groups
     // that grant author/edit access across the platform or a site, so they are as dangerous to hand out in
     // bulk as the administrator groups. Names are compared lower-case against the resolved JCR group name
     // (not the CSV value).
     private static final Set<String> DENIED_GROUPS = new HashSet<>(Arrays.asList(
-            "administrators", "server-administrators", "root-administrators",
+            SUPER_USER_GROUP, "server-administrators", "root-administrators",
             "site-administrators", "system-administrators", "compliance-managers",
             "privileged", "site-privileged"));
-
-    // Server-level group whose members are treated as protected super-users: their accounts are never
-    // overwritten by a bulk import, even when the overwrite flag is set (defends a renamed "root").
-    private static final String SUPER_USER_GROUP = "administrators";
 
     // Hard ceiling on the number of CSV data rows processed in a single import. Bounds the synchronous,
     // system-session workload (one createUser + save per row) independently of the byte-size limit.
