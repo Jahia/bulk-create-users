@@ -86,4 +86,13 @@ mutation {
 }
 ```
 
-Both operations require the `adminUsers` permission.
+### Authorization
+
+The mutation carries a `@GraphQLRequiresPermission("adminUsers")` annotation that acts as a first-pass gate for the GraphQL engine. That gate is intentionally set to the server-level `adminUsers` permission because:
+
+1. **Unauthenticated requests** are rejected before the method body runs — the annotation prevents any unauthenticated caller from reaching the scope check.
+2. A second, scope-aware check (`isAuthorizedForScope`) runs inside the method body: callers targeting a site need only `siteAdminUsers` on that site; callers targeting the global user base still require `adminUsers` on the root node.
+
+**Consequence for site-administrators:** a user who holds only the site-level `siteAdminUsers` role (but not the global `adminUsers` role) will be rejected by the annotation before the scope check can accept them. Site-scoped imports therefore require the caller to hold the global `adminUsers` permission **in addition to** (or instead of) `siteAdminUsers`.
+
+If you need pure site-admin access without the global `adminUsers` grant, the annotation would need to be lowered to `siteAdminUsers` and `isAuthorizedForScope` would become the sole authorization gate for both scopes — a change that requires careful review of how the GraphQL engine evaluates the annotation against the site node vs. the root node.
