@@ -44,7 +44,7 @@ public class BulkCreateUsersMutationExtension {
     @GraphQLField
     @GraphQLName("bulkCreateUsersImport")
     @GraphQLDescription("Imports users from a CSV string; returns a detailed result with per-user counts and errors")
-    @GraphQLRequiresPermission("adminUsers")
+    @GraphQLRequiresPermission("adminUsersBulkCreate")
     public static BulkCreateUsersResult importUsers(
             @GraphQLName("csvContent") @GraphQLNonNull final String csvContent,
             @GraphQLName("separator") final String separator,
