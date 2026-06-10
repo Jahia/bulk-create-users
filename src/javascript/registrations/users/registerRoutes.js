@@ -6,7 +6,7 @@ import CreateUsers from '../CreateUsers';
 export const registerRoutes = function () {
     registry.add('adminRoute', 'bulkCreateUsers', {
         targets: ['administration-server-usersAndRoles:999'],
-        requiredPermission: 'adminUsers',
+        requiredPermission: 'adminUsersBulkCreate',
         icon: null,
         label: 'bulk-create-users:users.label',
         isSelectable: true,
