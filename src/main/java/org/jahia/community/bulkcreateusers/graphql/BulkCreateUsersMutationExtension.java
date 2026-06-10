@@ -30,10 +30,14 @@ public class BulkCreateUsersMutationExtension {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BulkCreateUsersMutationExtension.class);
 
-    // Permission required to manage users at the server (global) scope.
-    private static final String SERVER_USERS_PERMISSION = "adminUsers";
-    // Permission required to manage users within a single site.
+    // Permission required to bulk-import users at the server (global) scope. This intentionally matches the
+    // fine-grained @GraphQLRequiresPermission("adminUsersBulkCreate") gate so that a role granting only
+    // adminUsersBulkCreate can perform the global import end-to-end (no broader "adminUsers" needed).
+    private static final String SERVER_USERS_PERMISSION = "adminUsersBulkCreate";
+    // Permission required to manage users within a single site (site-scope branch is unchanged).
     private static final String SITE_USERS_PERMISSION = "siteAdminUsers";
+    // Broad server-level users-admin permission, still accepted as a fallback for the per-site scope.
+    private static final String GLOBAL_USERS_ADMIN_PERMISSION = "adminUsers";
     // A site key is a short, opaque identifier: letters, digits, dash and underscore only. Enforcing this
     // shape also prevents path traversal when the key is composed into the "/sites/<key>" node path below.
     private static final Pattern SITE_KEY_PATTERN = Pattern.compile("[A-Za-z0-9_-]{1,150}");
@@ -96,7 +100,8 @@ public class BulkCreateUsersMutationExtension {
      * evaluated through their own (ACL-respecting) session — not the system session used for the writes.
      *
      * <ul>
-     *   <li>{@code siteKey == null} (global users): requires {@code adminUsers} on the repository root.</li>
+     *   <li>{@code siteKey == null} (global users): requires {@code adminUsersBulkCreate} on the repository
+     *       root, matching the fine-grained gate so the bulk-create role works end-to-end.</li>
      *   <li>otherwise: requires {@code siteAdminUsers} (or {@code adminUsers}) on {@code /sites/<siteKey>}.</li>
      * </ul>
      *
@@ -109,7 +114,7 @@ public class BulkCreateUsersMutationExtension {
                 return session.getNode("/").hasPermission(SERVER_USERS_PERMISSION);
             }
             final JCRNodeWrapper siteNode = session.getNode("/sites/" + siteKey);
-            return siteNode.hasPermission(SITE_USERS_PERMISSION) || siteNode.hasPermission(SERVER_USERS_PERMISSION);
+            return siteNode.hasPermission(SITE_USERS_PERMISSION) || siteNode.hasPermission(GLOBAL_USERS_ADMIN_PERMISSION);
         } catch (PathNotFoundException e) {
             LOGGER.warn("Authorization denied: requested site does not exist");
             return false;
