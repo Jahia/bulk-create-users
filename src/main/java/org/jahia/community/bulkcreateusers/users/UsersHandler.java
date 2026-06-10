@@ -72,6 +72,11 @@ public class UsersHandler {
     // Maximum number of characters echoed into a log line for attacker-controlled fields.
     private static final int LOG_FIELD_MAX_LEN = 200;
 
+    // Fallback CSV field separator used when the caller supplies a null/empty one. The handler is a
+    // public OSGi service callable independently of the GraphQL layer, so it must not assume the
+    // separator has already been defaulted/validated upstream.
+    private static final char DEFAULT_SEPARATOR = ',';
+
     private JahiaUserManagerService userManagerService;
     private JahiaGroupManagerService groupManagerService;
 
@@ -107,7 +112,7 @@ public class UsersHandler {
     }
 
     private void runImport(JCRSessionWrapper session, ImportRequest request, int[] counts, List<String> errors) {
-        try (CSVReader reader = new CSVReader(new StringReader(request.csvContent), request.separator.charAt(0), '"')) {
+        try (CSVReader reader = new CSVReader(new StringReader(request.csvContent), separatorChar(request.separator), '"')) {
             final String[] headers = reader.readNext();
             if (headers == null) {
                 LOGGER.error("Missing headers in CSV file");
@@ -128,6 +133,16 @@ public class UsersHandler {
             counts[2]++;
             errors.add("Fatal error: " + e.getMessage());
         }
+    }
+
+    /**
+     * Resolves the single character handed to {@link CSVReader}. A null or empty separator falls back
+     * to {@link #DEFAULT_SEPARATOR}; only the first character is honoured. Prevents a
+     * {@link StringIndexOutOfBoundsException} when the handler is called directly (not via the GraphQL
+     * layer, which defaults the separator itself). Visible for testing.
+     */
+    static char separatorChar(String separator) {
+        return (separator == null || separator.isEmpty()) ? DEFAULT_SEPARATOR : separator.charAt(0);
     }
 
     private void processRows(CSVReader reader, RowContext ctx, int[] counts) throws IOException {
@@ -165,6 +180,12 @@ public class UsersHandler {
         final String username = values.get(layout.userIdx);
         final String password = values.get(layout.passIdx);
         final String groups = (layout.groupIdx >= 0 && layout.groupIdx < values.size()) ? values.get(layout.groupIdx) : null;
+
+        if (username == null || username.trim().isEmpty()) {
+            LOGGER.warn("Skipping row with a blank username");
+            ctx.errors.add("Row skipped: blank username");
+            return RESULT_ERROR;
+        }
 
         final Properties props = buildPropertiesOrReport(values, ctx, username);
         if (props == null) {

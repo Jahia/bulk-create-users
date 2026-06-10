@@ -116,6 +116,36 @@ class UsersHandlerTest {
     }
 
     @Nested
+    @DisplayName("separatorChar")
+    class SeparatorResolution {
+
+        @Test
+        @DisplayName("falls back to comma for a null separator")
+        void nullFallsBackToComma() {
+            assertThat(UsersHandler.separatorChar(null)).isEqualTo(',');
+        }
+
+        @Test
+        @DisplayName("falls back to comma for an empty separator")
+        void emptyFallsBackToComma() {
+            assertThat(UsersHandler.separatorChar("")).isEqualTo(',');
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {";", "\t", "|", ","})
+        @DisplayName("honours the first character of a non-empty separator")
+        void honoursFirstCharacter(String separator) {
+            assertThat(UsersHandler.separatorChar(separator)).isEqualTo(separator.charAt(0));
+        }
+
+        @Test
+        @DisplayName("uses only the first character of a multi-character separator")
+        void usesOnlyFirstCharacter() {
+            assertThat(UsersHandler.separatorChar(";;")).isEqualTo(';');
+        }
+    }
+
+    @Nested
     @DisplayName("isGroupDenied")
     class GroupDenylist {
 
