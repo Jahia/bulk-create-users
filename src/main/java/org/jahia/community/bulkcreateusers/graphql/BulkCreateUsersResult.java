@@ -4,6 +4,8 @@ import graphql.annotations.annotationTypes.GraphQLDescription;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @GraphQLName("BulkCreateUsersResult")
@@ -23,7 +25,9 @@ public class BulkCreateUsersResult {
         this.updatedCount = updatedCount;
         this.skippedCount = skippedCount;
         this.errorCount = errorCount;
-        this.errors = errors;
+        // Defensive copy: the caller's list must not be able to mutate the result after construction.
+        this.errors = (errors == null) ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(errors));
     }
 
     @GraphQLField
