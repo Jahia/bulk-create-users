@@ -315,17 +315,18 @@ export const CreateUsers = () => {
                                 {missingRequired.length > 0 && t('columns.missingRequired', {columns: missingRequired.join(', ')})}
                             </div>
 
-                            {/* Fix #7: Required columns are status indicators, not interactive controls.
-                                Replace the disabled-checkbox pattern with a status <ul>/<li> list.
-                                The fieldset/legend wrapper is kept for grouping semantics.
+                            {/* Fix #1 (SC 4.1.2): Required columns are status indicators, not interactive
+                                controls. <fieldset>/<legend> is for grouping form controls; these
+                                <li> items carry no interactive semantics, so a plain <div> with a
+                                labelled <ul> is the correct pattern.
                                 Each <li> carries id="bcu-col-req-{col}" (same id shape as before)
                                 so Cypress selectors remain valid. The ✓/✗ glyph and missing badge
                                 are marked aria-hidden; sr-only text conveys present/missing to AT. */}
-                            <fieldset className={styles.bcu_columnFieldset}>
-                                <legend className={styles.bcu_columnGroupLabel}>
+                            <div className={styles.bcu_columnFieldset}>
+                                <p className={styles.bcu_columnGroupLabel} id="bcu-required-cols-label">
                                     {t('columns.required')}
-                                </legend>
-                                <ul className={styles.bcu_requiredStatusList}>
+                                </p>
+                                <ul className={styles.bcu_requiredStatusList} aria-label={t('columns.required')}>
                                     {REQUIRED_COLUMNS.map(col => {
                                         const isPresent = detectedRequired.includes(col);
                                         return (
@@ -350,7 +351,7 @@ export const CreateUsers = () => {
                                         );
                                     })}
                                 </ul>
-                            </fieldset>
+                            </div>
 
                             {detectedOptional.length > 0 && (
                                 <fieldset className={styles.bcu_columnFieldset}>
