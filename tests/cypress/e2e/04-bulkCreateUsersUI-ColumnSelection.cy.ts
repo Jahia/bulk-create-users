@@ -30,23 +30,26 @@ describe('Bulk Create Users — UI Column Selection', () => {
             cy.get('#bcu-columns', {timeout: 5000}).should('be.visible');
         });
 
-        it('shows required column checkboxes (disabled)', () => {
+        it('shows a status item for every required column', () => {
             cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
-            cy.get('#bcu-col-req-j-nodename', {timeout: 5000}).should('be.disabled');
-            cy.get('#bcu-col-req-j-password').should('be.disabled');
-            cy.get('#bcu-col-req-j-firstName').should('be.disabled');
-            cy.get('#bcu-col-req-j-lastName').should('be.disabled');
+            // Required columns are rendered as non-interactive status <li> items (not checkboxes),
+            // keeping their bcu-col-req-* ids.
+            cy.get('#bcu-col-req-j-nodename', {timeout: 5000}).should('be.visible');
+            cy.get('#bcu-col-req-j-password').should('be.visible');
+            cy.get('#bcu-col-req-j-firstName').should('be.visible');
+            cy.get('#bcu-col-req-j-lastName').should('be.visible');
         });
 
-        it('marks all required columns as checked when present', () => {
+        it('marks all required columns as present when present in the CSV', () => {
             cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
-            cy.get('#bcu-col-req-j-nodename', {timeout: 5000}).should('be.checked');
-            cy.get('#bcu-col-req-j-firstName').should('be.checked');
-            cy.get('#bcu-col-req-j-lastName').should('be.checked');
+            // Present columns show the ✓ glyph and must not carry the "missing from CSV" badge.
+            cy.get('#bcu-col-req-j-nodename', {timeout: 5000}).should('contain', '✓').and('not.contain', 'missing from CSV');
+            cy.get('#bcu-col-req-j-firstName').should('contain', '✓').and('not.contain', 'missing from CSV');
+            cy.get('#bcu-col-req-j-lastName').should('contain', '✓').and('not.contain', 'missing from CSV');
         });
 
         it('shows optional columns for CSVs with extra columns', () => {
