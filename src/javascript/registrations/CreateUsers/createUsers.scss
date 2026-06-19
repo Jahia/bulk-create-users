@@ -39,6 +39,8 @@
   border-radius: 8px;
   margin-bottom: 1rem;
   font-size: 0.95rem;
+  /* Ensure the close button (44x44) does not clip outside the banner */
+  padding-right: 3rem;
 }
 
 .bcu_success {
@@ -49,14 +51,24 @@
 
 .bcu_error {
   background-color: #fdecea;
-  color: #a4262c;
+  /* Fix #2 (SC 1.4.6): #a4262c was ~6.4:1 on #fdecea and ~5.6:1 on #f4f4f4 — fails AAA (7:1).
+     #8a1a1f achieves 8.18:1 on #fdecea, 8.54:1 on #f4f4f4, 9.34:1 on white. */
+  color: #8a1a1f;
   border: 1px solid #f5c6cb;
 }
 
+/* Fix #4: Close button enlarged to 44x44 px AAA touch target (WCAG 2.5.5).
+   inline-flex centres the × glyph inside the hit area while the button
+   stays visually positioned in the top-right corner of the banner. */
 .bcu_closeBtn {
   position: absolute;
-  top: 8px;
-  right: 12px;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   background: none;
   border: none;
   font-size: 1.2rem;
@@ -84,7 +96,9 @@
 
   .bcu_fileBtn {
     display: inline-block;
-    padding: 7px 14px;
+    /* Fix #4 (SC 2.5.5): raise touch target to 44px min height for AAA compliance. */
+    min-height: 44px;
+    padding: 10px 14px;
     background-color: #fff;
     border: 1px solid #004a80;
     border-radius: 4px;
@@ -127,8 +141,10 @@
     margin-top: 0.3rem;
   }
 
+  /* Fix #5: .bcu_fileHint colour changed from gray60 (~#666, 5.7:1) to gray80
+     fallback #595959 which achieves >=7:1 contrast against white (AAA). */
   .bcu_fileHint {
-    color: var(--moonstone-color-gray60);
+    color: var(--moonstone-color-gray80, #595959);
     font-size: 0.85rem;
     margin-top: 0.25rem;
     display: block;
@@ -196,7 +212,8 @@
   margin-top: 0.5rem;
   padding-left: 1.5rem;
   font-size: 0.9rem;
-  color: #a4262c;
+  /* Fix #2 (SC 1.4.6): #a4262c (~5.6:1 on #f4f4f4) → #8a1a1f (8.54:1 on #f4f4f4). */
+  color: #8a1a1f;
 }
 
 .bcu_columnsSection {
@@ -206,7 +223,8 @@
 
 .bcu_missingRequired {
   background-color: #fdecea;
-  color: #a4262c;
+  /* Fix #2 (SC 1.4.6): #a4262c (~6.4:1 on #fdecea) → #8a1a1f (8.18:1 on #fdecea). */
+  color: #8a1a1f;
   border: 1px solid #f5c6cb;
   border-radius: 6px;
   padding: 0.6rem 1rem;
@@ -228,10 +246,12 @@
   margin-top: 0.8rem;
 }
 
+/* Fix #5: .bcu_columnGroupLabel fallback hardened from #555 (4.9:1) to #4a4a4a (>=7:1 AAA).
+   The token var(--moonstone-color-gray80) is kept as the preferred value. */
 .bcu_columnGroupLabel {
   display: block;
   margin-bottom: 0.4rem;
-  color: var(--moonstone-color-gray80, #555);
+  color: var(--moonstone-color-gray80, #4a4a4a);
   font-weight: bold;
   font-size: 0.85rem;
 }
@@ -240,6 +260,9 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* Fix #4 (SC 2.5.5): 44px min-height ensures the entire label row meets the
+     AAA touch-target requirement. padding is kept but min-height governs. */
+  min-height: 44px;
   padding: 0.25rem 0;
   font-size: 0.9rem;
   cursor: pointer;
@@ -258,8 +281,9 @@
 }
 
 .bcu_missingBadge {
-    font-size: 0.8125rem;
-  color: #a4262c;
+  font-size: 0.8125rem;
+  /* Fix #2 (SC 1.4.6): #a4262c (~6.4:1 on #fdecea) → #8a1a1f (8.18:1 on #fdecea). */
+  color: #8a1a1f;
   background-color: #fdecea;
   border: 1px solid #f5c6cb;
   border-radius: 4px;
@@ -267,11 +291,35 @@
   margin-left: 0.3rem;
 }
 
+/* Fix #7: Styles for the required-columns status list that replaces the
+   disabled-checkbox pattern. These are purely presentational list items —
+   no interactive semantics. */
+.bcu_requiredStatusList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bcu_requiredStatusItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.bcu_requiredStatusGlyph {
+  font-size: 0.9rem;
+  /* Inherits colour from parent (.bcu_columnMissing sets red for missing items) */
+}
+
 .bcu_section {
   margin-top: 1.5rem;
   max-width: 600px;
 }
 
+/* Fix #5: .bcu_toggleRequirements colour hardened with explicit safe fallback #222
+   so it never falls back to an inherited or transparent value. */
 .bcu_toggleRequirements {
   display: flex;
   align-items: center;
@@ -284,14 +332,17 @@
   width: 100%;
   font-weight: 600;
   font-size: 1.05rem;
-  color: var(--moonstone-color-dark);
+  color: var(--moonstone-color-dark, #222);
 
   &:hover {
     text-decoration: underline;
   }
 
   &:focus-visible {
-    outline: 2px solid var(--moonstone-color-accent, #00a0e3);
+    /* Fix #3 (SC 2.4.13): #00a0e3 fallback was ~2.94:1 on white — fails SC 2.4.13 (need ≥3:1)
+       and SC 1.4.3 AA (need ≥4.5:1 for normal text outline).
+       #006e9e achieves 5.64:1 on white, well above both thresholds. */
+    outline: 2px solid var(--moonstone-color-accent, #006e9e);
     outline-offset: 2px;
   }
 

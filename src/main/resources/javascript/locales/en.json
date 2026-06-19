@@ -37,7 +37,9 @@
     "required": "Required columns",
     "optional": "Optional columns",
     "missing": "missing from CSV",
-    "missingRequired": "Required columns not found in CSV: {{columns}}"
+    "missingRequired": "Required columns not found in CSV: {{columns}}",
+    "present": "present in CSV",
+    "missingStatus": "missing from CSV"
   },
   "result": {
     "success": "{{count}} user(s) created successfully",

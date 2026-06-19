@@ -40,6 +40,15 @@ class UsersHandlerTest {
         void allowsBenignProperties(String key) {
             assertThat(UsersHandler.isPropertyDenied(key)).isFalse();
         }
+
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "J:PASSWORD", "J:Roles", "JCR:uuid", "J:accountLocked", "J:RolesInGroup", "JCR:mixinTypes"
+        })
+        @DisplayName("denies privileged properties regardless of case (denylist is case-insensitive)")
+        void deniesDangerousPropertiesCaseInsensitive(String key) {
+            assertThat(UsersHandler.isPropertyDenied(key)).isTrue();
+        }
     }
 
     @Nested

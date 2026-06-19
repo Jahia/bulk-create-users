@@ -88,11 +88,13 @@ mutation {
 
 ### Authorization
 
-The mutation carries a `@GraphQLRequiresPermission("adminUsers")` annotation that acts as a first-pass gate for the GraphQL engine. That gate is intentionally set to the server-level `adminUsers` permission because:
+Authorization is enforced in two layers:
 
-1. **Unauthenticated requests** are rejected before the method body runs — the annotation prevents any unauthenticated caller from reaching the scope check.
-2. A second, scope-aware check (`isAuthorizedForScope`) runs inside the method body: callers targeting a site need only `siteAdminUsers` on that site; callers targeting the global user base still require `adminUsers` on the root node.
+1. **Annotation gate.** Both the `bulkCreateUsersImport` mutation and the `bulkCreateUsersMaxUploadSize` query carry `@GraphQLRequiresPermission("adminUsersBulkCreate")`. This fine-grained, dedicated permission is the first-pass gate evaluated by the GraphQL engine, so any unauthenticated caller — or any caller lacking `adminUsersBulkCreate` — is rejected before the method body runs.
+2. **Scope-aware re-check.** Because the annotation is not scope-aware, the mutation re-verifies the caller's permission against the resolved target, evaluated through the caller's own ACL-respecting session (not the system session used for the writes), in `isAuthorizedForScope`:
+   - **Global import** (`siteKey` omitted): requires `adminUsersBulkCreate` on the repository root `/`.
+   - **Site-scoped import** (`siteKey` provided): requires `siteAdminUsers` **or** `adminUsers` on `/sites/<siteKey>`.
 
-**Consequence for site-administrators:** a user who holds only the site-level `siteAdminUsers` role (but not the global `adminUsers` role) will be rejected by the annotation before the scope check can accept them. Site-scoped imports therefore require the caller to hold the global `adminUsers` permission **in addition to** (or instead of) `siteAdminUsers`.
+   The re-check **fails closed**: any repository error, or an unknown site, denies the import.
 
-If you need pure site-admin access without the global `adminUsers` grant, the annotation would need to be lowered to `siteAdminUsers` and `isAuthorizedForScope` would become the sole authorization gate for both scopes — a change that requires careful review of how the GraphQL engine evaluates the annotation against the site node vs. the root node.
+**Granting the permission.** Add `adminUsersBulkCreate` to the role(s) that should be allowed to bulk-import users. A role that grants only `adminUsersBulkCreate` can perform a global import end-to-end — no broader `adminUsers` grant is required. For site-scoped imports the caller additionally needs `siteAdminUsers` (or `adminUsers`) on the target site.
