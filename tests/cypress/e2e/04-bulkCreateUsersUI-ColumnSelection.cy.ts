@@ -48,6 +48,7 @@ describe('Bulk Create Users — UI Column Selection', () => {
             cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
             // Present columns show the ✓ glyph and must not carry the "missing from CSV" badge.
             cy.get('#bcu-col-req-j-nodename', {timeout: 5000}).should('contain', '✓').and('not.contain', 'missing from CSV');
+            cy.get('#bcu-col-req-j-password').should('contain', '✓').and('not.contain', 'missing from CSV');
             cy.get('#bcu-col-req-j-firstName').should('contain', '✓').and('not.contain', 'missing from CSV');
             cy.get('#bcu-col-req-j-lastName').should('contain', '✓').and('not.contain', 'missing from CSV');
         });

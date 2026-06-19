@@ -125,6 +125,9 @@
               *
             </Import-Package>
             <_dsannotations>org.jahia.community.bulkcreateusers.*</_dsannotations>
+            <!-- This bundle is compiled to Java 17 bytecode; declare the execution environment so an
+                 older JVM rejects it cleanly at the OSGi layer instead of failing with a ClassFormatError. -->
+            <Require-Capability>osgi.ee;filter:="(&amp;(osgi.ee=JavaSE)(version=17))"</Require-Capability>
           </instructions>
         </configuration>
       </plugin>
