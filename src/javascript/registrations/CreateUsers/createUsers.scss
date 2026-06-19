@@ -39,6 +39,8 @@
   border-radius: 8px;
   margin-bottom: 1rem;
   font-size: 0.95rem;
+  /* Ensure the close button (44x44) does not clip outside the banner */
+  padding-right: 3rem;
 }
 
 .bcu_success {
@@ -53,10 +55,18 @@
   border: 1px solid #f5c6cb;
 }
 
+/* Fix #4: Close button enlarged to 44x44 px AAA touch target (WCAG 2.5.5).
+   inline-flex centres the × glyph inside the hit area while the button
+   stays visually positioned in the top-right corner of the banner. */
 .bcu_closeBtn {
   position: absolute;
-  top: 8px;
-  right: 12px;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   background: none;
   border: none;
   font-size: 1.2rem;
@@ -127,8 +137,10 @@
     margin-top: 0.3rem;
   }
 
+  /* Fix #5: .bcu_fileHint colour changed from gray60 (~#666, 5.7:1) to gray80
+     fallback #595959 which achieves >=7:1 contrast against white (AAA). */
   .bcu_fileHint {
-    color: var(--moonstone-color-gray60);
+    color: var(--moonstone-color-gray80, #595959);
     font-size: 0.85rem;
     margin-top: 0.25rem;
     display: block;
@@ -228,10 +240,12 @@
   margin-top: 0.8rem;
 }
 
+/* Fix #5: .bcu_columnGroupLabel fallback hardened from #555 (4.9:1) to #4a4a4a (>=7:1 AAA).
+   The token var(--moonstone-color-gray80) is kept as the preferred value. */
 .bcu_columnGroupLabel {
   display: block;
   margin-bottom: 0.4rem;
-  color: var(--moonstone-color-gray80, #555);
+  color: var(--moonstone-color-gray80, #4a4a4a);
   font-weight: bold;
   font-size: 0.85rem;
 }
@@ -267,11 +281,35 @@
   margin-left: 0.3rem;
 }
 
+/* Fix #7: Styles for the required-columns status list that replaces the
+   disabled-checkbox pattern. These are purely presentational list items —
+   no interactive semantics. */
+.bcu_requiredStatusList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bcu_requiredStatusItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.bcu_requiredStatusGlyph {
+  font-size: 0.9rem;
+  /* Inherits colour from parent (.bcu_columnMissing sets red for missing items) */
+}
+
 .bcu_section {
   margin-top: 1.5rem;
   max-width: 600px;
 }
 
+/* Fix #5: .bcu_toggleRequirements colour hardened with explicit safe fallback #222
+   so it never falls back to an inherited or transparent value. */
 .bcu_toggleRequirements {
   display: flex;
   align-items: center;
@@ -284,7 +322,7 @@
   width: 100%;
   font-weight: 600;
   font-size: 1.05rem;
-  color: var(--moonstone-color-dark);
+  color: var(--moonstone-color-dark, #222);
 
   &:hover {
     text-decoration: underline;

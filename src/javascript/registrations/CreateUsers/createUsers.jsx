@@ -36,9 +36,16 @@ export const CreateUsers = () => {
     const [inputKey, setInputKey] = useState(0);
     const [importResult, setImportResult] = useState(null);
 
+    // Fix #3: messageBannerRef points to the VISIBLE message banner for focus management.
+    // alertRef / statusRef remain as always-present sr-only live regions for AT announcement
+    // but are no longer focused directly (focus on clipped regions hides keyboard focus).
     const alertRef = useRef(null);
     const statusRef = useRef(null);
     const fileInputRef = useRef(null);
+    // Fix #6: ref for the proxy file button so focus can return to it after cancel
+    const fileBtnRef = useRef(null);
+    // Fix #3: ref for the visible message banner
+    const messageBannerRef = useRef(null);
 
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [missingRequired, setMissingRequired] = useState([]);
@@ -53,7 +60,7 @@ export const CreateUsers = () => {
 
     const {data: settingsData} = useQuery(GET_MAX_UPLOAD_SIZE);
     const maxSize = settingsData?.bulkCreateUsersMaxUploadSize;
-    const maxSizeMb = maxSize != null ? Math.floor(maxSize / (1024 * 1024)) : null;
+    const maxSizeMb = typeof maxSize === 'number' ? Math.floor(maxSize / (1024 * 1024)) : null;
 
     const [importUsers, {loading: isUploading}] = useMutation(BULK_CREATE_USERS_IMPORT);
 
@@ -100,7 +107,8 @@ export const CreateUsers = () => {
             csvContent = await readFileAsText(csvFile);
         } catch {
             addMessage('error', t('error.readFile'));
-            setTimeout(() => alertRef.current?.focus(), 50);
+            // Fix #3: focus the VISIBLE message banner, not the sr-only alert region
+            setTimeout(() => messageBannerRef.current?.focus(), 50);
             return;
         }
 
@@ -124,17 +132,20 @@ export const CreateUsers = () => {
             setImportResult(result);
             if (result?.success) {
                 addMessage('success', t('result.success', {count: result.createdCount}));
-                setTimeout(() => statusRef.current?.focus(), 50);
+                // Fix #3: focus the VISIBLE message banner, not the sr-only status region
+                setTimeout(() => messageBannerRef.current?.focus(), 50);
                 setCsvFile(null);
                 setDelimiter(',');
                 setInputKey(prev => prev + 1);
             } else {
                 addMessage('error', t('result.partial', {errorCount: result?.errorCount ?? 1}));
-                setTimeout(() => alertRef.current?.focus(), 50);
+                // Fix #3: focus the VISIBLE message banner
+                setTimeout(() => messageBannerRef.current?.focus(), 50);
             }
         } catch (err) {
             addMessage('error', t('error.network', {message: err.message}));
-            setTimeout(() => alertRef.current?.focus(), 50);
+            // Fix #3: focus the VISIBLE message banner
+            setTimeout(() => messageBannerRef.current?.focus(), 50);
         }
     };
 
@@ -151,7 +162,7 @@ export const CreateUsers = () => {
             return setCsvFile(null);
         }
 
-        if (maxSize != null && file.size > maxSize) {
+        if (typeof maxSize === 'number' && file.size > maxSize) {
             addMessage('error', t('validation.tooLarge', {maxSizeMb}));
             return setCsvFile(null);
         }
@@ -166,11 +177,23 @@ export const CreateUsers = () => {
         setImportResult(null);
         setOverwrite(false);
         setInputKey(prev => prev + 1);
+        // Fix #6: return focus to the visible proxy file button so it does not drop to <body>
+        fileBtnRef.current?.focus();
     };
 
+    // Fix #3: renderMessages attaches messageBannerRef to the first visible banner
+    // and makes it programmatically focusable (tabIndex={-1}) so focus lands on a
+    // visible element after submit/error. The sr-only live regions (alertRef/statusRef)
+    // continue to announce changes to AT but are no longer focused themselves.
     const renderMessages = () =>
-        messages.map(m => (
-            <div key={m.id} id={`bcu-message-${m.severity}`} className={`${styles.bcu_message} ${styles[`bcu_${m.severity}`]}`}>
+        messages.map((m, index) => (
+            <div
+                key={m.id}
+                ref={index === 0 ? messageBannerRef : null}
+                id={`bcu-message-${m.severity}`}
+                tabIndex={-1}
+                className={`${styles.bcu_message} ${styles[`bcu_${m.severity}`]}`}
+            >
                 {m.text}
                 <button
                     type="button"
@@ -187,10 +210,10 @@ export const CreateUsers = () => {
 
     return (
         <div className={styles.bcu_root}>
-            {/* Alert live region — always in DOM with fixed role */}
+            {/* Fix #3: sr-only alert live region — always in DOM for AT announcement.
+                tabIndex removed so it is never the focus target for sighted users. */}
             <div
                 ref={alertRef}
-                tabIndex={-1}
                 role="alert"
                 aria-live="assertive"
                 aria-atomic="true"
@@ -198,10 +221,10 @@ export const CreateUsers = () => {
             >
                 {messages[0]?.severity === 'error' ? messages[0]?.text : ''}
             </div>
-            {/* Status live region — always in DOM with fixed role */}
+            {/* Fix #3: sr-only status live region — always in DOM for AT announcement.
+                tabIndex removed so it is never the focus target for sighted users. */}
             <div
                 ref={statusRef}
-                tabIndex={-1}
                 role="status"
                 aria-live="polite"
                 aria-atomic="true"
@@ -214,15 +237,20 @@ export const CreateUsers = () => {
                     <Typography variant="title" weight="semiBold">{t('title')}</Typography>
                 </header>
                 {renderMessages()}
-                <form className={styles.bcu_form} onSubmit={handleSubmit} aria-busy={isUploading}>
+                <form className={styles.bcu_form} aria-busy={isUploading} onSubmit={handleSubmit}>
                     <div className={styles.bcu_formField}>
-                        <Typography component="label" htmlFor="bcu-csv-file" variant="body" weight="bold">
+                        {/* Fix #2: htmlFor now points at the real file <input> id="bcu-csv-file-input"
+                            so the label correctly associates with the actual control, not the proxy button. */}
+                        <Typography component="label" htmlFor="bcu-csv-file-input" variant="body" weight="bold">
                             {t('label.csvFile')}
                         </Typography>
                         <span id="bcu-file-hint" className={styles.bcu_fileHint}>
-                            {maxSizeMb != null ? t('hint.csvFile', {maxSizeMb}) : t('hint.csvFileFormat')}
+                            {typeof maxSizeMb === 'number' ? t('hint.csvFile', {maxSizeMb}) : t('hint.csvFileFormat')}
                         </span>
+                        {/* Fix #6: fileBtnRef attached so handleCancel can return focus here.
+                            id="bcu-csv-file" preserved for Cypress. */}
                         <button
+                            ref={fileBtnRef}
                             type="button"
                             id="bcu-csv-file"
                             className={styles.bcu_fileBtn}
@@ -232,13 +260,23 @@ export const CreateUsers = () => {
                         >
                             {t('label.chooseFile')}
                         </button>
+                        {/* Fix #1: tabIndex={-1} removes this hidden input from tab order —
+                            the proxy button above handles all keyboard interaction.
+                            Fix #2: id="bcu-csv-file-input" (distinct from proxy button id) so the
+                            <label htmlFor="bcu-csv-file-input"> association is correct.
+                            Fix #2: aria-describedby="bcu-file-hint" associates the hint with the
+                            actual control (in addition to the proxy button). */}
                         <input
+                            key={inputKey}
                             ref={fileInputRef}
                             type="file"
+                            id="bcu-csv-file-input"
                             name="csvFile"
                             accept=".csv"
+                            tabIndex={-1}
                             className={styles.bcu_fileInput}
                             aria-label={t('label.csvFile')}
+                            aria-describedby="bcu-file-hint"
                             disabled={isUploading}
                             onChange={handleFileChange}
                         />
@@ -270,32 +308,49 @@ export const CreateUsers = () => {
                                 {t('columns.title')}
                             </Typography>
 
+                            {/* Fix #8: bcu-missing-required always rendered with role="alert";
+                                only the text content is conditional. The element is present
+                                (but empty) when nothing is missing, satisfying the requirement
+                                that the live region pre-exists before content is injected. */}
                             <div id="bcu-missing-required" role="alert" aria-live="assertive" className={missingRequired.length > 0 ? styles.bcu_missingRequired : ''}>
                                 {missingRequired.length > 0 && t('columns.missingRequired', {columns: missingRequired.join(', ')})}
                             </div>
 
+                            {/* Fix #7: Required columns are status indicators, not interactive controls.
+                                Replace the disabled-checkbox pattern with a status <ul>/<li> list.
+                                The fieldset/legend wrapper is kept for grouping semantics.
+                                Each <li> carries id="bcu-col-req-{col}" (same id shape as before)
+                                so Cypress selectors remain valid. The ✓/✗ glyph and missing badge
+                                are marked aria-hidden; sr-only text conveys present/missing to AT. */}
                             <fieldset className={styles.bcu_columnFieldset}>
                                 <legend className={styles.bcu_columnGroupLabel}>
                                     {t('columns.required')}
                                 </legend>
-                                {REQUIRED_COLUMNS.map(col => (
-                                    <label
-                                        key={col}
-                                        className={`${styles.bcu_columnItem} ${!detectedRequired.includes(col) ? styles.bcu_columnMissing : ''}`}
-                                    >
-                                        <input
-                                            id={`bcu-col-req-${col.replace(':', '-')}`}
-                                            type="checkbox"
-                                            checked={detectedRequired.includes(col)}
-                                            disabled
-                                            readOnly
-                                        />
-                                        <span>{col}</span>
-                                        {!detectedRequired.includes(col) && (
-                                            <span className={styles.bcu_missingBadge}>{t('columns.missing')}</span>
-                                        )}
-                                    </label>
-                                ))}
+                                <ul className={styles.bcu_requiredStatusList}>
+                                    {REQUIRED_COLUMNS.map(col => {
+                                        const isPresent = detectedRequired.includes(col);
+                                        return (
+                                            <li
+                                                key={col}
+                                                id={`bcu-col-req-${col.replace(':', '-')}`}
+                                                className={`${styles.bcu_requiredStatusItem} ${isPresent ? '' : styles.bcu_columnMissing}`}
+                                            >
+                                                <span aria-hidden="true" className={styles.bcu_requiredStatusGlyph}>
+                                                    {isPresent ? '✓' : '✗'}
+                                                </span>
+                                                <span>{col}</span>
+                                                {!isPresent && (
+                                                    <span aria-hidden="true" className={styles.bcu_missingBadge}>
+                                                        {t('columns.missing')}
+                                                    </span>
+                                                )}
+                                                <span className={styles.bcu_sr_only}>
+                                                    {isPresent ? t('columns.present') : t('columns.missingStatus')}
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
                             </fieldset>
 
                             {detectedOptional.length > 0 && (
