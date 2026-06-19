@@ -36,8 +36,10 @@ class BulkCreateUsersResultTest {
     void errorsAreUnmodifiable() {
         BulkCreateUsersResult result = new BulkCreateUsersResult(false, 0, 0, 0, 1,
                 new ArrayList<>(Arrays.asList("boom")));
+        List<String> errors = result.getErrors();
 
-        assertThatThrownBy(() -> result.getErrors().add("mutate"))
+        // Only one invocation that may throw inside the lambda (java:S5778): getErrors() is hoisted out.
+        assertThatThrownBy(() -> errors.add("mutate"))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 

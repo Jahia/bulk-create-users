@@ -180,6 +180,12 @@
         <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-compiler-plugin</artifactId>
+            <!-- This module targets Java 17 (build + runtime), overriding the Java 11 baseline
+                 inherited from the jahia-modules parent. Jahia 8.2 runs on Java 17, which lets the
+                 code use records and switch expressions. -->
+            <configuration>
+                <release>17</release>
+            </configuration>
         </plugin>
     </plugins>
   </build>

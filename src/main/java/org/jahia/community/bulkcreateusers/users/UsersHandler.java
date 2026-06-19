@@ -58,16 +58,19 @@ public class UsersHandler {
     // A writable property key must match this shape: a Jahia/JCR-style name, optionally namespaced.
     // Rejecting anything else stops control characters, whitespace, or path-like tokens from ever
     // reaching setProperty / createUser as a property name.
-    private static final Pattern SAFE_PROPERTY_NAME = Pattern.compile("[A-Za-z][A-Za-z0-9_]*(:[A-Za-z][A-Za-z0-9_]*)?");
+    private static final Pattern SAFE_PROPERTY_NAME = Pattern.compile("[A-Za-z]\\w*(:[A-Za-z]\\w*)?");
 
     // User-node properties that must never be written from CSV input.
     // Includes role/permission grants, account-lock flips, external-account flags, and the password field
     // (which createUser handles via its dedicated parameter, never via setProperty).
-    private static final Set<String> DENIED_PROPERTIES = new HashSet<>(Arrays.asList(
+    // Stored lower-cased; isPropertyDenied() lower-cases the candidate key so the denylist is
+    // case-insensitive and cannot be evaded with a mixed-case variant (e.g. "J:roles", "JCR:uuid").
+    private static final Set<String> DENIED_PROPERTIES = toLowerCaseSet(
             JCRUserNode.J_PASSWORD, Constants.NODENAME,
             "j:accountLocked", "j:external", "j:externalSource",
-            "j:roles", "j:permissions"));
-    private static final String[] DENIED_PROPERTY_PREFIXES = {"jcr:", "j:rolesIn", "j:account"};
+            "j:roles", "j:permissions");
+    // Lower-cased prefixes, matched against the lower-cased candidate key.
+    private static final String[] DENIED_PROPERTY_PREFIXES = {"jcr:", "j:rolesin", "j:account"};
 
     // Maximum number of characters echoed into a log line for attacker-controlled fields.
     private static final int LOG_FIELD_MAX_LEN = 200;
@@ -77,11 +80,29 @@ public class UsersHandler {
     // separator has already been defaulted/validated upstream.
     private static final char DEFAULT_SEPARATOR = ',';
 
+    // Reserved CSV column carrying group assignments ([group1],[group2]); handled outside property mapping.
+    private static final String GROUPS_COLUMN = "groups";
+
+    private static Set<String> toLowerCaseSet(String... values) {
+        final Set<String> set = new HashSet<>();
+        for (final String value : values) {
+            set.add(value.toLowerCase(Locale.ROOT));
+        }
+        return set;
+    }
+
     private JahiaUserManagerService userManagerService;
     private JahiaGroupManagerService groupManagerService;
 
     public BulkCreateUsersResult importUsers(final String csvContent, final String separator,
             final String siteKey, final List<String> selectedColumns, final boolean overwrite) throws RepositoryException {
+        if (csvContent == null) {
+            // Defensive: the GraphQL layer marks csvContent @GraphQLNonNull, but this is a public OSGi
+            // service callable independently, so guard rather than NPE inside the CSV reader.
+            LOGGER.error("Bulk user import called with null CSV content");
+            return new BulkCreateUsersResult(false, 0, 0, 0, 1,
+                    Collections.singletonList("No CSV content provided"));
+        }
         if (siteKey != null) {
             LOGGER.info("Bulk adding users for site: {}", lazy(siteKey));
         }
@@ -129,9 +150,11 @@ public class UsersHandler {
             }
             processRows(reader, new RowContext(request, layout, session, errors), counts);
         } catch (IOException e) {
+            // Log the detail server-side; return a generic message so internal exception text is not
+            // echoed back to the client.
             LOGGER.error("Error during bulk user creation", e);
             counts[2]++;
-            errors.add("Fatal error: " + e.getMessage());
+            errors.add("Fatal error while reading the CSV content");
         }
     }
 
@@ -272,14 +295,14 @@ public class UsersHandler {
     }
 
     /**
-     * Per-row commit boundary: skipped rows need no save; processed rows are persisted individually
-     * so that a single failure cannot poison the whole import. On commit failure the session is rolled
-     * back via {@code refresh(false)} and the row is reported as an error.
+     * Per-row commit boundary: each processed row is persisted individually so that a single failure
+     * cannot poison the whole import. CREATED, UPDATED <em>and</em> SKIPPED rows are all saved — a
+     * "skipped" existing user can still have had group memberships staged ({@code addUserToGroups}
+     * runs on the skip path), so those changes must be flushed; {@code session.save()} is a no-op when
+     * nothing was staged. Only ERROR rows skip the save: the session is rolled back via
+     * {@code refresh(false)} to discard partial mutations before the next row.
      */
     private int commitRow(JCRSessionWrapper session, int result, List<String> errors) {
-        if (result == RESULT_SKIPPED) {
-            return result;
-        }
         if (result == RESULT_ERROR) {
             // Some row-level failure paths (e.g. setProperty mid-overwrite) may leave partial mutations
             // staged - discard them before processing the next row.
@@ -323,7 +346,7 @@ public class UsersHandler {
     }
 
     static boolean isWritableColumn(String key, Set<String> allowedColumns) {
-        if (key.isEmpty() || "groups".equals(key) || !isSafePropertyName(key) || isPropertyDenied(key)) {
+        if (key.isEmpty() || GROUPS_COLUMN.equals(key) || !isSafePropertyName(key) || isPropertyDenied(key)) {
             return false;
         }
         return allowedColumns == null || allowedColumns.contains(key);
@@ -339,11 +362,12 @@ public class UsersHandler {
     }
 
     static boolean isPropertyDenied(String key) {
-        if (DENIED_PROPERTIES.contains(key)) {
+        final String lowerKey = key.toLowerCase(Locale.ROOT);
+        if (DENIED_PROPERTIES.contains(lowerKey)) {
             return true;
         }
         for (String prefix : DENIED_PROPERTY_PREFIXES) {
-            if (key.startsWith(prefix)) {
+            if (lowerKey.startsWith(prefix)) {
                 return true;
             }
         }
@@ -448,7 +472,7 @@ public class UsersHandler {
             if (userIdx < 0 || passIdx < 0) {
                 return null;
             }
-            return new CsvLayout(headerList, userIdx, passIdx, headerList.indexOf("groups"));
+            return new CsvLayout(headerList, userIdx, passIdx, headerList.indexOf(GROUPS_COLUMN));
         }
     }
 
