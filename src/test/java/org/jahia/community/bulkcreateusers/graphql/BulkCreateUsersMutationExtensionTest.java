@@ -8,7 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Unit tests for {@link BulkCreateUsersMutationExtension#isValidSiteKey(String)} — the traversal-safe
+ * Unit tests for {@link BulkCreateUsersMutation#isValidSiteKey(String)} — the traversal-safe
  * site-key guard. A malformed key here would be composed into the "/sites/&lt;key&gt;" node path used by
  * the scope authorization check, so rejecting path tokens is security-relevant.
  */
@@ -18,7 +18,7 @@ class BulkCreateUsersMutationExtensionTest {
     @ValueSource(strings = {"digitall", "my-site", "site_01", "ACME", "a"})
     @DisplayName("accepts well-formed site keys")
     void acceptsValidKeys(String key) {
-        assertThat(BulkCreateUsersMutationExtension.isValidSiteKey(key)).isTrue();
+        assertThat(BulkCreateUsersMutation.isValidSiteKey(key)).isTrue();
     }
 
     @ParameterizedTest
@@ -28,14 +28,14 @@ class BulkCreateUsersMutationExtensionTest {
     })
     @DisplayName("rejects keys containing path, whitespace, or special characters")
     void rejectsTraversalAndSpecials(String key) {
-        assertThat(BulkCreateUsersMutationExtension.isValidSiteKey(key)).isFalse();
+        assertThat(BulkCreateUsersMutation.isValidSiteKey(key)).isFalse();
     }
 
     @Test
     @DisplayName("rejects null and empty")
     void rejectsNullAndEmpty() {
-        assertThat(BulkCreateUsersMutationExtension.isValidSiteKey(null)).isFalse();
-        assertThat(BulkCreateUsersMutationExtension.isValidSiteKey("")).isFalse();
+        assertThat(BulkCreateUsersMutation.isValidSiteKey(null)).isFalse();
+        assertThat(BulkCreateUsersMutation.isValidSiteKey("")).isFalse();
     }
 
     @Test
@@ -45,6 +45,6 @@ class BulkCreateUsersMutationExtensionTest {
         for (int i = 0; i < 151; i++) {
             sb.append('a');
         }
-        assertThat(BulkCreateUsersMutationExtension.isValidSiteKey(sb.toString())).isFalse();
+        assertThat(BulkCreateUsersMutation.isValidSiteKey(sb.toString())).isFalse();
     }
 }

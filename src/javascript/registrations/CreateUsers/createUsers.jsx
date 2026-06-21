@@ -59,7 +59,7 @@ export const CreateUsers = () => {
     }, [t]);
 
     const {data: settingsData} = useQuery(GET_MAX_UPLOAD_SIZE);
-    const maxSize = settingsData?.bulkCreateUsersMaxUploadSize;
+    const maxSize = settingsData?.bulkCreateUsers?.maxUploadSize;
     const maxSizeMb = typeof maxSize === 'number' ? Math.floor(maxSize / (1024 * 1024)) : null;
 
     const [importUsers, {loading: isUploading}] = useMutation(BULK_CREATE_USERS_IMPORT);
@@ -128,7 +128,7 @@ export const CreateUsers = () => {
                     overwrite
                 }
             });
-            const result = data?.bulkCreateUsersImport;
+            const result = data?.bulkCreateUsers?.importUsers;
             setImportResult(result);
             if (result?.success) {
                 addMessage('success', t('result.success', {count: result.createdCount}));

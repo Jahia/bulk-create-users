@@ -90,9 +90,9 @@ describe('Bulk Create Users — permission enforcement', () => {
             // adminUsersBulkCreate) and the import actually creates the user.
             importUsersAs(ALLOWED_USER).then((result: never) => {
                 expect(errorsOf(result), 'should have no GraphQL errors').to.have.length(0);
-                const imported = (result as {data: {bulkCreateUsersImport: {
+                const imported = (result as {data: {bulkCreateUsers: {importUsers: {
                     success: boolean; createdCount: number; errorCount: number; errors: string[];
-                }}}).data.bulkCreateUsersImport;
+                }}}}).data.bulkCreateUsers.importUsers;
                 expect(imported.success, 'import success').to.be.true;
                 expect(imported.createdCount, 'createdCount').to.eq(1);
                 expect(imported.errorCount, 'errorCount').to.eq(0);

@@ -34,7 +34,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: CSV_VALID, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(2);
@@ -49,7 +49,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: CSV_VALID, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result).to.have.all.keys('__typename', 'success', 'createdCount', 'updatedCount', 'skippedCount', 'errorCount', 'errors');
                 });
@@ -60,7 +60,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: CSV_VALID, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.skippedCount).to.be.greaterThan(0);
                     expect(result.createdCount).to.eq(0);
@@ -77,7 +77,7 @@ describe('Bulk Create Users', () => {
                     selectedColumns: [...REQUIRED_COLUMNS, 'j:email']
                 }
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(2);
@@ -94,7 +94,7 @@ describe('Bulk Create Users', () => {
                     selectedColumns: REQUIRED_COLUMNS  // j:email NOT selected
                 }
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                 });
@@ -106,7 +106,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: csvMissingColumns, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.false;
                     expect(result.errorCount).to.be.greaterThan(0);
@@ -118,7 +118,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: '', separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.false;
                 });
@@ -131,7 +131,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: semicolonCsv, separator: ';', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(1);
@@ -146,7 +146,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: csvWithGroups, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(1);
@@ -160,7 +160,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: csvWithBadGroup, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     // user is created even though the group was not found
                     expect(result.success).to.be.true;
@@ -175,7 +175,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: csvUpdated, separator: ',', selectedColumns: REQUIRED_COLUMNS, overwrite: true}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                     expect(result.updatedCount).to.eq(1);
@@ -193,7 +193,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: CSV_WITH_EMAIL, separator: ','}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(2);
@@ -207,7 +207,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: CSV_WITH_EMAIL, separator: ',', selectedColumns: []}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(2);
@@ -225,7 +225,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: csvWithBadRow, separator: ',', selectedColumns: REQUIRED_COLUMNS}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.createdCount).to.eq(2);
                     expect(result.errorCount).to.be.greaterThan(0);
@@ -239,7 +239,7 @@ describe('Bulk Create Users', () => {
                 mutation: importUsers,
                 variables: {csvContent: csvWithRoot, separator: ',', selectedColumns: REQUIRED_COLUMNS, overwrite: true}
             })
-                .its('data.bulkCreateUsersImport')
+                .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
                     expect(result.updatedCount).to.eq(0);
                     expect(result.skippedCount).to.eq(1);
