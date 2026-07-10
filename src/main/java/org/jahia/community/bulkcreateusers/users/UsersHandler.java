@@ -375,16 +375,29 @@ public class UsersHandler {
     }
 
     private void addUserToGroups(JCRUserNode user, String groups, String siteKey, JCRSessionWrapper session) {
+        for (final String groupName : parseGroupTokens(groups)) {
+            tryAddToGroup(user, groupName, siteKey, session);
+        }
+    }
+
+    /**
+     * Extracts every {@code [groupName]} token from the CSV {@code groups} cell (e.g.
+     * {@code "[group1],[group2]"}), trimming inner whitespace and dropping empty brackets
+     * ({@code "[]"}). Returns an empty list for a null/blank input. Visible for testing.
+     */
+    static List<String> parseGroupTokens(String groups) {
+        final List<String> tokens = new ArrayList<>();
         if (groups == null || groups.trim().isEmpty()) {
-            return;
+            return tokens;
         }
         final Matcher matcher = GROUP_PATTERN.matcher(groups);
         while (matcher.find()) {
             final String groupName = matcher.group(1).trim();
             if (!groupName.isEmpty()) {
-                tryAddToGroup(user, groupName, siteKey, session);
+                tokens.add(groupName);
             }
         }
+        return tokens;
     }
 
     private void tryAddToGroup(JCRUserNode user, String groupName, String siteKey, JCRSessionWrapper session) {
@@ -426,7 +439,13 @@ public class UsersHandler {
         };
     }
 
-    private static String sanitizeForLog(String value) {
+    /**
+     * Strips {@code \r\n\t} (replaced with {@code _}) and truncates to {@link #LOG_FIELD_MAX_LEN}
+     * characters (appending {@code "..."}) so attacker-controlled fields (usernames, siteKeys,
+     * group names, exception messages) cannot forge extra log lines or blow up log size.
+     * Visible for testing.
+     */
+    static String sanitizeForLog(String value) {
         if (value == null) {
             return null;
         }
