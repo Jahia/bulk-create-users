@@ -101,6 +101,18 @@
       <version>5.14.2</version>
       <scope>test</scope>
     </dependency>
+    <!-- JCRUserNode/JCRGroupNode's Jahia core class hierarchy references Guava types
+         (com.google.common.base.Predicate) in method signatures. Guava is available as a
+         separate OSGi bundle at runtime inside a real Jahia container but is not declared as a
+         (transitive) Maven dependency of jahia-impl, so Mockito's inline mock maker cannot load
+         the hierarchy to generate a mock subclass without it on the test classpath. Test-only;
+         does not affect the shipped bundle. -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>33.3.1-jre</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <repositories>
     <repository>
