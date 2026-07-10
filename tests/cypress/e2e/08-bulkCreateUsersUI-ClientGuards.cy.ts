@@ -1,0 +1,85 @@
+import {DocumentNode} from 'graphql';
+
+/**
+ * U9-Cypress: the three client-side-only pre-submission guards documented in createUsers.jsx
+ * that the API itself does not enforce (the fourth sub-behaviour, Submit disabled while
+ * missingRequired.length > 0, is already covered by F11-UIEnforcesAllFour in
+ * 04-bulkCreateUsersUI-ColumnSelection.cy.ts and is not re-specified here):
+ *  1. A selected file not ending in .csv is rejected client-side (validation.notCsv).
+ *  2. A file exceeding the queried maxUploadSize is rejected client-side before any GraphQL call
+ *     is ever made (the client-side companion to F6, which tests the server-side rejection of a
+ *     payload that got past the client).
+ *  3. The delimiter <Input> has a hard maxLength={1}, so a direct keystroke of ";;" can never
+ *     produce a 2-character value in the DOM - the UI-side counterpart to D5.
+ */
+describe('Bulk Create Users — UI client-side guards (U9)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const deleteUser: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/deleteUser.graphql');
+
+    const ADMIN_ROUTE = '/jahia/administration/bulkCreateUsers';
+
+    before(() => {
+        cy.login();
+        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
+    });
+
+    after(() => {
+        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
+    });
+
+    describe('non-.csv file extension', () => {
+        it('rejects a selected file that does not end in .csv and never shows the column section', () => {
+            cy.login();
+            cy.visit(ADMIN_ROUTE);
+            cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/not-a-csv.txt', {force: true});
+            cy.get('[id="bcu-message-error"]', {timeout: 5000}).should('be.visible').and('contain', 'valid CSV file');
+            cy.get('#bcu-columns').should('not.exist');
+            cy.get('#bcu-submit').should('be.disabled');
+        });
+    });
+
+    describe('client-side file-size pre-check', () => {
+        it('rejects a file larger than the queried maxUploadSize before any import mutation is fired', () => {
+            cy.login();
+            cy.intercept('POST', '**/modules/graphql').as('gqlCalls');
+
+            // Read the real configured limit independently (same query the component itself
+            // fires on mount) so the oversized fixture is guaranteed to exceed it.
+            cy.apollo({
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                query: require('graphql-tag/loader!../fixtures/graphql/query/maxUploadSize.graphql'),
+                log: false
+            }).its('data.bulkCreateUsers.maxUploadSize').then((limit: number) => {
+                cy.visit(ADMIN_ROUTE);
+
+                const oversizedContent = 'j:nodename,j:password,j:firstName,j:lastName\n' +
+                    'a'.repeat(Math.max(limit + 1024, 1024));
+                cy.get('input[name="csvFile"]').selectFile({
+                    contents: Cypress.Buffer.from(oversizedContent),
+                    fileName: 'oversized.csv',
+                    mimeType: 'text/csv'
+                }, {force: true});
+
+                cy.get('[id="bcu-message-error"]', {timeout: 5000})
+                    .should('be.visible')
+                    .and('contain', 'File size must be less than');
+                cy.get('#bcu-columns').should('not.exist');
+
+                cy.get('@gqlCalls.all').then((calls: unknown[]) => {
+                    const importCalls = (calls as Array<{request: {body?: {operationName?: string}}}>)
+                        .filter(call => call.request?.body?.operationName === 'BulkCreateUsersImport');
+                    expect(importCalls, 'BulkCreateUsersImport mutation calls').to.have.length(0);
+                });
+            });
+        });
+    });
+
+    describe('delimiter hard length cap', () => {
+        it('never allows a 2-character delimiter value in the DOM (maxLength={1})', () => {
+            cy.login();
+            cy.visit(ADMIN_ROUTE);
+            cy.get('#bcu-delimiter').clear().type(';;');
+            cy.get('#bcu-delimiter').should('have.value', ';');
+        });
+    });
+});

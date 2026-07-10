@@ -1,0 +1,22 @@
+query BulkCreateUsersSchemaIntrospection {
+    mutationType: __type(name: "Mutation") {
+        fields {
+            name
+        }
+    }
+    queryType: __type(name: "Query") {
+        fields {
+            name
+        }
+    }
+    mutationNamespace: __type(name: "BulkCreateUsersMutation") {
+        fields {
+            name
+        }
+    }
+    queryNamespace: __type(name: "BulkCreateUsersQuery") {
+        fields {
+            name
+        }
+    }
+}

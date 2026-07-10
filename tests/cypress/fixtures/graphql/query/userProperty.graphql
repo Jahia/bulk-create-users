@@ -1,0 +1,10 @@
+query BulkCreateUsersUserProperty($username: String!, $siteKey: String, $propertyName: String!) {
+    admin {
+        userAdmin {
+            user(username: $username, site: $siteKey) {
+                username
+                value: property(name: $propertyName)
+            }
+        }
+    }
+}
