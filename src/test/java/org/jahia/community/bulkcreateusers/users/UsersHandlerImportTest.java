@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -337,39 +336,51 @@ class UsersHandlerImportTest {
     }
 
     @Nested
-    @DisplayName("D6-JUnit Part A (highest priority): an uncaught exception propagates out of importUsers")
+    @DisplayName("D6-JUnit Part A (highest priority, fixed): a mid-batch exception is recorded as a row-level error")
     class UncaughtExceptionPropagation {
 
         @Test
-        @DisplayName("createUser throwing on row 2 propagates uncaught, but row 1 was already committed")
-        void uncaughtExceptionPropagatesAfterFirstRowCommits() {
+        @DisplayName("createUser throwing on row 2 is caught, recorded as a row error, and rows 1 and 3 still commit")
+        void exceptionOnOneRowIsRecordedAsRowErrorAndImportContinues() throws RepositoryException {
             final String csv = "j:nodename,j:password,j:firstName,j:lastName\n"
                     + "user1,pass1,Alice,Smith\n"
                     + "user2,pass2,Bob,Jones\n"
                     + "user3,pass3,Carol,Doe";
             when(userManagerService.lookupUser(anyString(), isNull(), eq(session))).thenReturn(null);
-            // The replacement user mock must be fully constructed (including its own
+            // The replacement user mocks must be fully constructed (including their own
             // when(...).thenReturn(...) stubbing) BEFORE this outer when(...) chain starts -
             // otherwise Mockito's stubbing-in-progress tracking gets confused by the nested
             // mock interaction and throws UnfinishedStubbingException.
             final JCRUserNode user1 = mockUserNode("user1");
+            final JCRUserNode user3 = mockUserNode("user3");
             when(userManagerService.createUser(anyString(), isNull(), anyString(), any(Properties.class), eq(session)))
                     .thenReturn(user1)
-                    .thenThrow(new RuntimeException("simulated JCR failure"));
+                    .thenThrow(new RuntimeException("simulated JCR failure"))
+                    .thenReturn(user3);
 
-            assertThatThrownBy(() -> runImport(csv, ",", null, REQUIRED_COLUMNS, false))
-                    .isInstanceOf(RuntimeException.class)
-                    .hasMessage("simulated JCR failure");
+            final BulkCreateUsersResult result = runImport(csv, ",", null, REQUIRED_COLUMNS, false);
 
-            // Row 1 succeeded and was committed (session.save() called once) before row 2 threw;
-            // row 3 was never reached (createUser called exactly twice, not three times).
-            verify(userManagerService, times(2))
+            // Bug fix (D6): the exception on row 2 no longer propagates out of importUsers and no
+            // longer wipes out the accumulated counts - it is recorded as a single row-level error
+            // and processing continues to row 3, which succeeds normally.
+            assertThat(result.isSuccess()).isFalse();
+            assertThat(result.getCreatedCount()).isEqualTo(2);
+            assertThat(result.getUpdatedCount()).isZero();
+            assertThat(result.getSkippedCount()).isZero();
+            assertThat(result.getErrorCount()).isEqualTo(1);
+            assertThat(result.getErrors()).hasSize(1);
+            assertThat(result.getErrors().get(0))
+                    .contains("user2")
+                    .contains("unexpected error");
+
+            // All three rows were attempted (createUser called exactly three times, not aborted
+            // after row 2).
+            verify(userManagerService, times(3))
                     .createUser(anyString(), isNull(), anyString(), any(Properties.class), eq(session));
-            try {
-                verify(session, times(1)).save();
-            } catch (RepositoryException e) {
-                throw new AssertionError("session.save() mock verification should not throw", e);
-            }
+            // Rows 1 and 3 were committed (session.save() called twice); row 2's partial mutations
+            // were rolled back once via session.refresh(false) instead of being saved.
+            verify(session, times(2)).save();
+            verify(session, times(1)).refresh(false);
         }
     }
 }

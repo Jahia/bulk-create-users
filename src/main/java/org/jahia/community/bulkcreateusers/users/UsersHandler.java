@@ -178,9 +178,36 @@ public class UsersHandler {
                 counts[2]++;
                 return;
             }
-            final int result = processUser(row, ctx);
+            final int result = processUserSafely(row, ctx);
             tally(counts, commitRow(ctx.session, result, ctx.errors));
         }
+    }
+
+    /**
+     * Wraps {@link #processUser} so an unexpected exception thrown mid-row by user/group creation
+     * (e.g. {@code userManagerService.createUser} or {@code JCRGroupNode.addMember} surfacing an
+     * underlying {@code RepositoryException} as an unchecked exception) is recorded as a row-level
+     * error and the import continues to the next row - the same "one bad row becomes an error,
+     * keep going" contract already used for empty required columns ({@link #buildPropertiesOrReport})
+     * and failed property updates ({@link #handleExistingUser}). Without this, the exception would
+     * propagate out of {@link #runImport}/{@link #importUsers}, discarding every count and error
+     * accumulated for rows already committed and surfacing only a generic "Internal error" to the
+     * caller (D6) - even though those earlier rows remain persisted in the repository.
+     */
+    private int processUserSafely(String[] row, RowContext ctx) {
+        try {
+            return processUser(row, ctx);
+        } catch (RuntimeException e) {
+            final String username = safeUsername(row, ctx.layout);
+            LOGGER.error("Unexpected error while processing row for user {}", lazy(username), e);
+            ctx.errors.add("Row for '" + sanitizeForLog(username) + "': failed to process due to an unexpected error");
+            return RESULT_ERROR;
+        }
+    }
+
+    /** Best-effort username extraction for error reporting when a row blows up unexpectedly. */
+    private static String safeUsername(String[] row, CsvLayout layout) {
+        return (layout.userIdx >= 0 && layout.userIdx < row.length) ? row[layout.userIdx] : "unknown";
     }
 
     private static void tally(int[] counts, int committed) {
