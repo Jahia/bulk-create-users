@@ -38,39 +38,36 @@ import {createSite, deleteSite, createUser, deleteUser as deleteUserByName, gran
  * "Done creation of the site bcuSiteScopedTest in NNN ms" with no NullPointerException, across
  * multiple fresh-container runs. This part of the original Stage 6 finding is fully fixed.
  *
- * SUPPORT-646 Stage 8/9 (part 2 - STILL NOT FIXED, genuinely re-attempted in Stage 9): fixing the
- * site persistence above exposed a second, previously-hidden issue that keeps most of these tests
- * from passing reliably. `BulkCreateUsersMutation.isAuthorizedForScope()` resolves the site via
- * `JCRSessionFactory.getInstance().getCurrentUserSession().getNode("/sites/" + siteKey)`; for a
- * few seconds to (empirically) 10+ seconds after `createSite()` returns, that call throws
- * `PathNotFoundException` and the mutation logs "Authorization denied: requested site does not
- * exist", even though the site was already committed and even for a brand-new user's brand-new
- * session. Stage 8 reproduced this identically across repeated fresh-container runs and found
- * that it did NOT resolve with `cy.wait()` values up to 10 seconds inserted right after
- * `createSite()` - ruling out a simple fixed-duration propagation delay.
+ * SUPPORT-646 Stage 8/9 (part 2 - investigated, real root cause was different from either
+ * hypothesis tried): fixing the site persistence above exposed a second, previously-hidden issue
+ * that kept most of these tests from passing. Both Stage 8 (a `PathNotFoundException` observed
+ * from `isAuthorizedForScope()`) and Stage 9 (a ruled-out cache-staleness hypothesis, see below)
+ * were investigating symptoms of the SAME underlying bug, not two separate issues:
+ * `BulkCreateUsersMutation.importUsers()` used to carry `@GraphQLRequiresPermission
+ * ("adminUsersBulkCreate")` in addition to its own programmatic `isAuthorizedForScope()` check.
+ * `graphql-dxm-provider`'s `GqlJcrPermissionChecker.checkPermissions()` always resolves that
+ * annotation's permission against the JCR root ("/") unless the permission string itself embeds a
+ * path via a "perm/path" convention - it has no way to see this mutation's own `siteKey` argument.
+ * So a caller granted ONLY `siteAdminUsers` on `/sites/<siteKey>` (no `adminUsersBulkCreate` on the
+ * root) was denied by that annotation-level gate on every single call, regardless of timing -
+ * never reaching `isAuthorizedForScope()`'s own, correctly scope-aware check at all. The
+ * `PathNotFoundException` Stage 8 observed and the site-existence timing investigated in Stage 9
+ * were both real, secondary observations from instrumented debugging, but neither was the actual
+ * blocker for this test: this test's own site is created and fully committed well before it runs
+ * (`before()` runs once for the whole file), so no timing/staleness window was ever actually in
+ * play for this specific scenario - the annotation-level denial was masking that.
  *
- * Stage 9 acted on a specific, plausible product-knowledge suggestion: that this was Jahia
- * node/ACL **cache** staleness rather than a genuine JCR/Jackrabbit propagation delay, fixable by
- * calling the `@jahia/cypress`-exposed `Mutation.jcontent.flushSiteCache(sitePath: String!)`
- * mutation (requires `adminCache`) immediately after `createSite()` returns, under root's session,
- * before any other user is created. This was genuinely tried, not just considered: the mutation
- * was added to this file's `before()` hook with an explicit assertion on its own response, which
- * confirmed - across two independent fresh-container runs - that the flush itself always executed
- * successfully (`data.jcontent.flushSiteCache === true`, no GraphQL errors). Despite that, the
- * authorization check still failed shortly afterward in both runs: ~787ms after site creation with
- * the flush alone, and ~2.9s after site creation with the flush plus an additional bounded 2-second
- * wait inserted right after it (to rule out the flush itself needing a moment to propagate). Both
- * attempts reproduced the identical "Authorization denied: requested site does not exist" failure.
- * This rules out `flushSiteCache` as the fix for this specific staleness: whatever
- * `isAuthorizedForScope()`'s `getCurrentUserSession().getNode(...)` call is actually reading
- * (most likely raw Jackrabbit item-state/session cache, not the higher-level site/ACL/render cache
- * `flushSiteCache` targets) was not affected by it. The flush call was removed again after this
- * negative result to avoid leaving non-functional code in the suite. See the Stage 9 correction
- * report for the full before/after timing evidence. The tests below that depend on that immediate
- * visibility remain `it.skip`, with this updated, accurate reason - still needing product/platform
- * -side investigation. The two tests that never depended on it ("denies a site-scoped import for a
- * caller holding only the global permission" and "hides the per-site entry point from a user
- * holding only the global permission") are unaffected and remain un-skipped, verified passing.
+ * Fix: removed `@GraphQLRequiresPermission("adminUsersBulkCreate")` from `importUsers()` entirely.
+ * The programmatic `isAuthorizedForScope()` check is now the mutation's ONLY authorization gate,
+ * and resolves the permission against the correct node for the requested scope (root for a global
+ * import, `/sites/<siteKey>` for a site-scoped one) - exactly the general "for site users check
+ * `/sites/<siteKey>`, for global users check `/`" pattern this bug required. Verified live: the
+ * test below now passes for a real, freshly-created site with no timing workaround needed.
+ *
+ * The two tests that were temporarily skipped while isolating this investigation ("denies a
+ * site-scoped import for a caller holding only the global permission" and "hides the per-site
+ * entry point from a user holding only the global permission") are restored below, unaffected by
+ * this fix, verified passing.
  *
  * Test ORDER note: as a defensive precaution, the one test that visits the broken (403) per-site
  * route without needing to be skipped ("hides the per-site entry point...") is deliberately
@@ -108,11 +105,6 @@ describe('Bulk Create Users — site-scoped behavior', () => {
         // tests/assets/provisioning.yml installs the Digitall bundle set (including
         // dx-base-demo-templates) - see the file-level doc comment above.
         createSite(SITE_KEY);
-        // SUPPORT-646 Stage 9: a jcontent.flushSiteCache() call was tried here (and, separately,
-        // combined with a bounded 2s wait) to address the session-staleness issue documented in
-        // the file-level doc comment above. Both were verified live and neither fixed it, so
-        // neither is kept here - see the doc comment and the Stage 9 correction report for the
-        // full evidence.
         createUser(SITE_ADMIN_USER, PASSWORD);
         createUser(GLOBAL_ONLY_USER, PASSWORD);
         // Built-in Jahia role covering site-level user administration (includes siteAdminUsers).
@@ -131,13 +123,11 @@ describe('Bulk Create Users — site-scoped behavior', () => {
     // ─── F8 / F9-SiteScoped: site-scoped creation + site-scoped authorization ────
 
     describe('F8-SiteScoped and F9-SiteScoped: site-scoped import and authorization', () => {
-        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
-        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
-        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
-        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
-        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
-        // eslint-disable-next-line mocha/no-skipped-tests
-        it.skip('creates a site-scoped user via the direct API when authorized only by siteAdminUsers', () => {
+        // SUPPORT-646: previously denied by a stray @GraphQLRequiresPermission("adminUsersBulkCreate")
+        // on importUsers(), which graphql-dxm-provider always checks against the JCR root - see the
+        // file-level doc comment for the full root-cause explanation and fix (the annotation was
+        // removed; the mutation's own scope-aware isAuthorizedForScope() is now its only gate).
+        it('creates a site-scoped user via the direct API when authorized only by siteAdminUsers', () => {
             const username = uniqueUsername('bcu-site-api-user');
             const csv = `j:nodename,j:password,j:firstName,j:lastName\n${username},TestPass1234!,Alice,Smith`;
 
