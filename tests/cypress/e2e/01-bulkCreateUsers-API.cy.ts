@@ -3,8 +3,6 @@ import {DocumentNode} from 'graphql';
 describe('Bulk Create Users', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const deleteUser: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/deleteUser.graphql');
 
     const TEST_USER_1 = 'bcu-test-user1';
     const TEST_USER_2 = 'bcu-test-user2';
@@ -12,9 +10,14 @@ describe('Bulk Create Users', () => {
     const CSV_VALID = 'j:nodename,j:password,j:firstName,j:lastName\nbcu-test-user1,TestPass1234!,Alice,Smith\nbcu-test-user2,TestPass1234!,Bob,Jones';
     const CSV_WITH_EMAIL = 'j:nodename,j:password,j:firstName,j:lastName,j:email\nbcu-test-user1,TestPass1234!,Alice,Smith,alice@example.com\nbcu-test-user2,TestPass1234!,Bob,Jones,bob@example.com';
 
+    // The previous cleanup used a raw JCR mutateNodesByQuery delete (deleteUser.graphql),
+    // which throws javax.jcr.AccessDeniedException against a real Jahia container -
+    // deleting jnt:user nodes through the generic content-delete path is not allowed.
+    // Since that call used failOnStatusCode: false, the failure was silently swallowed and
+    // cleanup was a no-op, letting test users accumulate across tests (SUPPORT-646 Stage 6
+    // finding). Use the proper JahiaUserManagerService-backed cleanup script instead.
     const deleteTestUsers = () => {
-        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
-        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
+        cy.executeGroovy('groovy/deleteAllTestUsers.groovy');
     };
 
     before(() => {

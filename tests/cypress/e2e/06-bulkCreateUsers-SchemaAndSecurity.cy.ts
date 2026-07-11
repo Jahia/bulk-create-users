@@ -20,8 +20,6 @@ import {createGroup, deleteGroup} from '@jahia/cypress';
  */
 describe('Bulk Create Users — schema shape and security boundaries', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const deleteUser: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/deleteUser.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const schemaIntrospection: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/schemaIntrospection.graphql');
@@ -34,8 +32,14 @@ describe('Bulk Create Users — schema shape and security boundaries', () => {
     const TEST_USER = 'bcu-test-user1';
     const EDITORS_GROUP = 'bcuSecurityEditors';
 
+    // See SUPPORT-646 Stage 6: the previous deleteUser.graphql cleanup used a raw JCR
+    // mutateNodesByQuery delete, which Jahia rejects for jnt:user nodes
+    // (AccessDeniedException), silently swallowed by failOnStatusCode: false - this caused
+    // all 6 tests in this spec to fail against a real container (users from earlier tests
+    // were never actually removed). Use the proper JahiaUserManagerService-backed cleanup
+    // script instead.
     const deleteTestUsers = () => {
-        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
+        cy.executeGroovy('groovy/deleteAllTestUsers.groovy');
     };
 
     before(() => {
@@ -57,17 +61,28 @@ describe('Bulk Create Users — schema shape and security boundaries', () => {
 
     describe('D1: GraphQL schema shape', () => {
         it('namespaces the mutation/query under bulkCreateUsers rather than flat top-level fields', () => {
-            cy.apollo({query: schemaIntrospection}).its('data').should(data => {
-                const mutationFields = data.mutationType.fields.map((f: {name: string}) => f.name);
-                const queryFields = data.queryType.fields.map((f: {name: string}) => f.name);
+            // SUPPORT-646 Stage 6: the original single query aliased 4 separate __type(...)
+            // lookups (mutationType/queryType/mutationNamespace/queryNamespace) in one request.
+            // Against a real Jahia container this trips graphql-java's "bad faith introspection"
+            // anti-DoS guard ("Query.__type is present too often!"), which the static analysis in
+            // Stage 5 had no way to observe. Splitting into 4 separate single-__type requests
+            // (via a $typeName variable) avoids that guard while asserting the exact same facts.
+            const fieldNames = (typeName: string) => cy.apollo({query: schemaIntrospection, variables: {typeName}})
+                .its('data.type.fields')
+                .then((fields: Array<{name: string}>) => fields.map(f => f.name));
+
+            fieldNames('Mutation').then(mutationFields => {
                 expect(mutationFields, 'Mutation fields').to.include('bulkCreateUsers');
                 expect(mutationFields, 'Mutation fields').to.not.include('bulkCreateUsersImport');
+            });
+            fieldNames('Query').then(queryFields => {
                 expect(queryFields, 'Query fields').to.include('bulkCreateUsers');
                 expect(queryFields, 'Query fields').to.not.include('bulkCreateUsersMaxUploadSize');
-
-                const mutationNamespaceFields = data.mutationNamespace.fields.map((f: {name: string}) => f.name);
-                const queryNamespaceFields = data.queryNamespace.fields.map((f: {name: string}) => f.name);
+            });
+            fieldNames('BulkCreateUsersMutation').then(mutationNamespaceFields => {
                 expect(mutationNamespaceFields, 'BulkCreateUsersMutation fields').to.include('importUsers');
+            });
+            fieldNames('BulkCreateUsersQuery').then(queryNamespaceFields => {
                 expect(queryNamespaceFields, 'BulkCreateUsersQuery fields').to.include('maxUploadSize');
             });
         });
@@ -113,9 +128,18 @@ describe('Bulk Create Users — schema shape and security boundaries', () => {
                     expect(result.createdCount).to.eq(1);
                 });
 
+            // SUPPORT-646 Stage 6: the denylisted property is genuinely null server-side (the
+            // write was correctly refused), but Cypress's .its() peeks at the *next* assertion
+            // to decide whether a null terminal value is acceptable, and only recognizes
+            // `.should('be.null')` as such - `.should('not.equal', ...)` is not recognized, so
+            // .its() kept retrying a legitimately-null value until it timed out
+            // ("returned a null value... waited... but it never did"). Using .then()+expect()
+            // instead reads the value once and asserts on it directly, sidestepping that
+            // retry-ability quirk without weakening the assertion.
             cy.apollo({query: userProperty, variables: {username: TEST_USER, propertyName: 'j:roles'}})
-                .its('data.admin.userAdmin.user.value')
-                .should('not.equal', 'root-role');
+                .then((result: {data: {admin: {userAdmin: {user: {value: string | null}}}}}) => {
+                    expect(result.data.admin.userAdmin.user.value).to.not.equal('root-role');
+                });
         });
     });
 

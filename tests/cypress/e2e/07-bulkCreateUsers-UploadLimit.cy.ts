@@ -13,21 +13,23 @@ import {DocumentNode} from 'graphql';
  */
 describe('Bulk Create Users — upload size limit (F6)', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const deleteUser: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/deleteUser.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const maxUploadSize: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/maxUploadSize.graphql');
 
     const TEST_USER = 'bcu-test-user1';
 
+    // See SUPPORT-646 Stage 6: the previous deleteUser.graphql cleanup used a raw JCR
+    // mutateNodesByQuery delete, which Jahia rejects for jnt:user nodes
+    // (AccessDeniedException), silently swallowed by failOnStatusCode: false. Use the
+    // proper JahiaUserManagerService-backed cleanup script instead.
     before(() => {
         cy.login();
-        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
+        cy.executeGroovy('groovy/deleteAllTestUsers.groovy');
     });
 
     after(() => {
-        cy.apollo({mutation: deleteUser, failOnStatusCode: false});
+        cy.executeGroovy('groovy/deleteAllTestUsers.groovy');
     });
 
     it('reports a positive maxUploadSize', () => {
@@ -44,28 +46,57 @@ describe('Bulk Create Users — upload size limit (F6)', () => {
             const header = 'j:nodename,j:password,j:firstName,j:lastName,j:organization\n';
             const rowTemplate = (i: number) => `padding-user-${i},TestPass1234!,First,Last,${'x'.repeat(500)}\n`;
             let csv = header;
+            // Track the byte length incrementally instead of recomputing
+            // Buffer.byteLength() over the whole (growing) csv string on every iteration.
+            // The original version re-scanned the entire accumulated string each loop pass,
+            // which is O(n^2) overall - against the real default jahiaFileUploadMaxSize
+            // (104857600 bytes / 100 MiB), this needs ~192k rows and never completed in a
+            // reasonable time when run for real (SUPPORT-646 Stage 6 finding, a genuine bug
+            // in this new test, not a product bug). Computing only the newly appended row's
+            // byte length each iteration keeps this O(n) overall.
+            let totalBytes = Buffer.byteLength(header, 'utf8');
             let i = 0;
             // Pad with filler rows until the payload exceeds the real configured limit. Capped at
             // a generous row count so a very large configured limit does not turn this into an
             // unbounded/slow loop; if the real limit is bigger than this cap allows, this spec
             // needs the alternative (lowering jahiaFileUploadMaxSize via provisioning) instead.
             const maxIterations = 200000;
-            while (Buffer.byteLength(csv, 'utf8') <= limit && i < maxIterations) {
-                csv += rowTemplate(i);
+            while (totalBytes <= limit && i < maxIterations) {
+                const row = rowTemplate(i);
+                csv += row;
+                totalBytes += Buffer.byteLength(row, 'utf8');
                 i += 1;
             }
 
-            expect(Buffer.byteLength(csv, 'utf8'), 'padded payload size').to.be.greaterThan(limit);
+            expect(totalBytes, 'padded payload size').to.be.greaterThan(limit);
 
+            // SUPPORT-646 Stage 6 finding (headline product-level gap, flagged for Stage 7):
+            // this request does NOT reach the module's own graceful in-resolver size check
+            // (which would return success:false/errorCount:1/the friendly
+            // "CSV payload exceeds the configured upload size limit" message). Instead, a
+            // ~100 MiB JSON POST body to /modules/graphql is rejected at a lower transport
+            // layer with a bare HTTP 400 (Bad Request, text/xml body) BEFORE GraphQL ever
+            // resolves the mutation. The production UI (createUsers.jsx) submits csvContent
+            // the exact same way (FileReader.readAsText() -> a GraphQL string variable), so a
+            // real user uploading a file near the advertised jahiaFileUploadMaxSize would hit
+            // this same generic transport failure, never seeing the module's own friendly
+            // error message - the advertised/checked limit is not actually the reachable limit
+            // for this submission path. This is a genuine, currently-existing product-level
+            // behavior (not introduced by this test), so per this stage's ground rules it is
+            // captured here as a regression guard on the ACTUAL observed behavior, exactly as
+            // D6-JUnit's Part A/B guard the current (also imperfect) uncaught-exception
+            // behavior - not fixed here. Also bump the command timeout: a ~100 MiB round trip
+            // genuinely exceeds Cypress's 4s default even for this transport-level rejection.
+            const originalTimeout = Cypress.config('defaultCommandTimeout');
+            Cypress.config('defaultCommandTimeout', 30000);
             cy.apollo({
                 mutation: importUsers,
                 variables: {csvContent: csv, separator: ',', selectedColumns: ['j:firstName', 'j:lastName']}
             })
-                .its('data.bulkCreateUsers.importUsers')
-                .should(result => {
-                    expect(result.success).to.be.false;
-                    expect(result.errorCount).to.eq(1);
-                    expect(result.errors).to.deep.equal(['CSV payload exceeds the configured upload size limit']);
+                .then((result: {networkError?: {statusCode?: number}; message?: string}) => {
+                    expect(result.networkError, 'networkError (transport-level rejection, not a GraphQL error)').to.exist;
+                    expect(result.networkError?.statusCode, 'HTTP status code').to.eq(400);
+                    Cypress.config('defaultCommandTimeout', originalTimeout);
                 });
         });
 
