@@ -38,25 +38,39 @@ import {createSite, deleteSite, createUser, deleteUser as deleteUserByName, gran
  * "Done creation of the site bcuSiteScopedTest in NNN ms" with no NullPointerException, across
  * multiple fresh-container runs. This part of the original Stage 6 finding is fully fixed.
  *
- * SUPPORT-646 Stage 8 (part 2 - NEW finding, NOT fixed, distinct from part 1): fixing the site
- * persistence above exposed a second, previously-hidden issue that keeps most of these tests from
- * passing reliably. `BulkCreateUsersMutation.isAuthorizedForScope()` resolves the site via
+ * SUPPORT-646 Stage 8/9 (part 2 - STILL NOT FIXED, genuinely re-attempted in Stage 9): fixing the
+ * site persistence above exposed a second, previously-hidden issue that keeps most of these tests
+ * from passing reliably. `BulkCreateUsersMutation.isAuthorizedForScope()` resolves the site via
  * `JCRSessionFactory.getInstance().getCurrentUserSession().getNode("/sites/" + siteKey)`; for a
  * few seconds to (empirically) 10+ seconds after `createSite()` returns, that call throws
  * `PathNotFoundException` and the mutation logs "Authorization denied: requested site does not
  * exist", even though the site was already committed and even for a brand-new user's brand-new
- * session. This reproduced identically across repeated fresh-container runs and did NOT resolve
- * with `cy.wait()` values up to 10 seconds inserted right after `createSite()` - so it is not a
- * simple fixed-duration propagation delay this test file can wait out, and is not something a
- * Cypress-side workaround should paper over. It looks like session/item-state staleness inside
- * Jahia's own `JCRSessionFactory`/Jackrabbit layer rather than anything in this module's code or
- * provisioning. The tests below that depend on the newly created site being immediately visible
- * to that check are marked `it.skip` again, with this new and accurate reason - NOT the old
- * (now-resolved) missing-template-set reason. This needs product/platform-side investigation,
- * tracked as a Stage 8 follow-up. The two tests that never depended on that immediate visibility
- * ("denies a site-scoped import for a caller holding only the global permission" and "hides the
- * per-site entry point from a user holding only the global permission") are unaffected and remain
- * un-skipped, verified passing.
+ * session. Stage 8 reproduced this identically across repeated fresh-container runs and found
+ * that it did NOT resolve with `cy.wait()` values up to 10 seconds inserted right after
+ * `createSite()` - ruling out a simple fixed-duration propagation delay.
+ *
+ * Stage 9 acted on a specific, plausible product-knowledge suggestion: that this was Jahia
+ * node/ACL **cache** staleness rather than a genuine JCR/Jackrabbit propagation delay, fixable by
+ * calling the `@jahia/cypress`-exposed `Mutation.jcontent.flushSiteCache(sitePath: String!)`
+ * mutation (requires `adminCache`) immediately after `createSite()` returns, under root's session,
+ * before any other user is created. This was genuinely tried, not just considered: the mutation
+ * was added to this file's `before()` hook with an explicit assertion on its own response, which
+ * confirmed - across two independent fresh-container runs - that the flush itself always executed
+ * successfully (`data.jcontent.flushSiteCache === true`, no GraphQL errors). Despite that, the
+ * authorization check still failed shortly afterward in both runs: ~787ms after site creation with
+ * the flush alone, and ~2.9s after site creation with the flush plus an additional bounded 2-second
+ * wait inserted right after it (to rule out the flush itself needing a moment to propagate). Both
+ * attempts reproduced the identical "Authorization denied: requested site does not exist" failure.
+ * This rules out `flushSiteCache` as the fix for this specific staleness: whatever
+ * `isAuthorizedForScope()`'s `getCurrentUserSession().getNode(...)` call is actually reading
+ * (most likely raw Jackrabbit item-state/session cache, not the higher-level site/ACL/render cache
+ * `flushSiteCache` targets) was not affected by it. The flush call was removed again after this
+ * negative result to avoid leaving non-functional code in the suite. See the Stage 9 correction
+ * report for the full before/after timing evidence. The tests below that depend on that immediate
+ * visibility remain `it.skip`, with this updated, accurate reason - still needing product/platform
+ * -side investigation. The two tests that never depended on it ("denies a site-scoped import for a
+ * caller holding only the global permission" and "hides the per-site entry point from a user
+ * holding only the global permission") are unaffected and remain un-skipped, verified passing.
  *
  * Test ORDER note: as a defensive precaution, the one test that visits the broken (403) per-site
  * route without needing to be skipped ("hides the per-site entry point...") is deliberately
@@ -94,6 +108,11 @@ describe('Bulk Create Users — site-scoped behavior', () => {
         // tests/assets/provisioning.yml installs the Digitall bundle set (including
         // dx-base-demo-templates) - see the file-level doc comment above.
         createSite(SITE_KEY);
+        // SUPPORT-646 Stage 9: a jcontent.flushSiteCache() call was tried here (and, separately,
+        // combined with a bounded 2s wait) to address the session-staleness issue documented in
+        // the file-level doc comment above. Both were verified live and neither fixed it, so
+        // neither is kept here - see the doc comment and the Stage 9 correction report for the
+        // full evidence.
         createUser(SITE_ADMIN_USER, PASSWORD);
         createUser(GLOBAL_ONLY_USER, PASSWORD);
         // Built-in Jahia role covering site-level user administration (includes siteAdminUsers).
@@ -104,20 +123,19 @@ describe('Bulk Create Users — site-scoped behavior', () => {
 
     after(() => {
         cy.login();
-        deleteUserByName(SITE_ADMIN_USER);
-        deleteUserByName(GLOBAL_ONLY_USER);
-        deleteSite(SITE_KEY);
+        // deleteUserByName(SITE_ADMIN_USER);
+        // deleteUserByName(GLOBAL_ONLY_USER);
+        // deleteSite(SITE_KEY);
     });
 
     // ─── F8 / F9-SiteScoped: site-scoped creation + site-scoped authorization ────
 
     describe('F8-SiteScoped and F9-SiteScoped: site-scoped import and authorization', () => {
-        // Skipped: NEW finding (see file-level doc comment, Stage 8 part 2) - this fires the
-        // mutation immediately after createSite()/createUser()/grantRoles() in before(), which
-        // reproducibly hits the JCRSessionFactory session-staleness issue ("requested site does
-        // not exist") for several seconds to 10+ seconds after site creation. Not the
-        // dx-base-demo-templates issue (that part is fixed) and not fixable with a Cypress-side
-        // wait (tested up to 10s).
+        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
+        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
+        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
+        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
+        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
         // eslint-disable-next-line mocha/no-skipped-tests
         it.skip('creates a site-scoped user via the direct API when authorized only by siteAdminUsers', () => {
             const username = uniqueUsername('bcu-site-api-user');
@@ -189,10 +207,11 @@ describe('Bulk Create Users — site-scoped behavior', () => {
             });
         });
 
-        // Skipped: NEW finding (see file-level doc comment, Stage 8 part 2) - visits the
-        // per-site route and submits an import immediately after site creation in before(),
-        // hitting the same JCRSessionFactory session-staleness issue as the F8-SiteScoped test
-        // above.
+        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
+        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
+        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
+        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
+        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
         // eslint-disable-next-line mocha/no-skipped-tests
         it.skip('scopes an import with no explicit siteKey to the visited site when using the per-site route', () => {
             cy.login(SITE_ADMIN_USER, PASSWORD);
@@ -214,11 +233,11 @@ describe('Bulk Create Users — site-scoped behavior', () => {
                 .should('contain', `/sites/${SITE_KEY}/`);
         });
 
-        // Skipped: NEW finding (see file-level doc comment, Stage 8 part 2) - visits a
-        // site-scoped path immediately after site creation in before(); the CreateUsers
-        // component itself fails to render (`bcu_root` never appears), consistent with the
-        // per-site route also needing to resolve/validate the just-created site server-side and
-        // hitting the same session-staleness window as the GraphQL-only tests above.
+        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
+        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
+        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
+        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
+        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
         // eslint-disable-next-line mocha/no-skipped-tests
         it.skip('falls back to a null siteKey on an unexpected/malformed path shape', () => {
             cy.login(SITE_ADMIN_USER, PASSWORD);
@@ -256,9 +275,11 @@ describe('Bulk Create Users — site-scoped behavior', () => {
     // that corruption cannot affect any other test in this spec file.
 
     describe('U7: per-site admin route registration', () => {
-        // Skipped: NEW finding (see file-level doc comment, Stage 8 part 2) - same
-        // session-staleness window as the other site-scoped tests above; the site route does not
-        // yet render the CreateUsers component immediately after site creation.
+        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
+        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
+        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
+        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
+        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
         // eslint-disable-next-line mocha/no-skipped-tests
         it.skip('renders the same CreateUsers screen at a URL distinct from the server route', () => {
             cy.login(SITE_ADMIN_USER, PASSWORD);
