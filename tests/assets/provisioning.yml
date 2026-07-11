@@ -1,2 +1,37 @@
 - karafCommand: "log:log 'START - bulk-create-users provisioning'"
+
+# The site-scoped Cypress spec (09-bulkCreateUsers-SiteScoped.cy.ts) calls the shared
+# @jahia/cypress createSite() helper, which defaults to the dx-base-demo-templates template
+# set. That template set is not part of the base ghcr.io/jahia/jahia-ee-dev:8-SNAPSHOT image,
+# so without installing it here createSite() silently fails to persist the site (see SUPPORT-646
+# Stage 6 root-cause investigation, corrected in the Stage-8 follow-up correction report). The
+# same Digitall bundle set is already confirmed working for this exact purpose in the csp-editor
+# module's own tests/assets/provisioning.yml - copied verbatim here rather than cherry-picked to
+# avoid missing an implicit dependency in the chain.
+- karafCommand: "log:log 'START - Install Digitall bundles'"
+- installBundle:
+      - 'mvn:org.jahia.modules/bookmarks/3.1.0'
+      - 'mvn:org.jahia.modules/bootstrap3-components/4.3.0'
+      - 'mvn:org.jahia.modules/bootstrap3-core/4.3.0'
+      - 'mvn:org.jahia.modules/calendar/3.2.0'
+      - 'mvn:org.jahia.modules/default-skins/8.2.0'
+      - 'mvn:org.jahia.modules/digitall/3.0.0'
+      - 'mvn:org.jahia.modules/dx-base-demo-components/3.0.0'
+      - 'mvn:org.jahia.modules/dx-base-demo-core/2.6.0'
+      - 'mvn:org.jahia.modules/dx-base-demo-templates/4.0.0'
+      - 'mvn:org.jahia.modules/event/4.0.1'
+      - 'mvn:org.jahia.modules/font-awesome/6.1.5'
+      - 'mvn:org.jahia.modules/grid/8.1.0'
+      - 'mvn:org.jahia.modules/legacy-default-components/1.0.0'
+      - 'mvn:org.jahia.modules/location/3.2.0'
+      - 'mvn:org.jahia.modules/news/3.4.0'
+      - 'mvn:org.jahia.modules/person/3.2.0'
+      - 'mvn:org.jahia.modules/press/3.1.0'
+      - 'mvn:org.jahia.modules/rating/3.3.0'
+      - 'mvn:org.jahia.modules/skins/8.2.0'
+      - 'mvn:org.jahia.modules/topstories/3.0.0'
+  autoStart: true
+  uninstallPreviousVersion: true
+- karafCommand: "log:log 'END - Install Digitall bundles'"
+
 - karafCommand: "log:log 'END - bulk-create-users provisioning'"
