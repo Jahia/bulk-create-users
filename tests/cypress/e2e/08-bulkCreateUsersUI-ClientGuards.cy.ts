@@ -38,24 +38,17 @@ describe('Bulk Create Users — UI client-side guards (U9)', () => {
     });
 
     describe('client-side file-size pre-check', () => {
-        // SUPPORT-646 Stage 6: genuinely skipped after real investigation, not a first-guess
-        // dismissal - two independent fixes were tried and both hit a hard Cypress-runner
-        // limitation, unrelated to this module's own code:
-        //   1. `Cypress.Buffer.from(oversizedContent)` (the original approach) throws
-        //      `RangeError: Invalid array length` - Cypress's bundled/browserified buffer
-        //      polyfill cannot convert a ~100 MiB string in-browser.
-        //   2. Switching to the native `TextEncoder().encode(...)` (which produces the
-        //      identical byte content without that polyfill) avoids failure #1, but then
-        //      `cy.get(...).selectFile({contents: <~100 MiB TypedArray>, ...})` itself throws
-        //      `RangeError: Invalid array length` from inside Cypress's own
-        //      `$Cypress.onCommandInvocation` argument-serialization path (used for the
-        //      Command Log / cross-iframe messaging), independent of how the buffer was built.
-        // A file that genuinely exceeds the real jahiaFileUploadMaxSize (~100 MiB) cannot be
-        // made meaningfully smaller without changing the premise of the test, and no
-        // lower-level `cy.window()`-based DOM/File API workaround was found within this
-        // stage's time budget that avoids Cypress's own command-argument path entirely.
-        // eslint-disable-next-line mocha/no-skipped-tests
-        it.skip('rejects a file larger than the queried maxUploadSize before any import mutation is fired', () => {
+        // SUPPORT-646 Stage 6 skipped this test after real investigation (not a first-guess
+        // dismissal): building/selecting a file just past the then-advertised maxUploadSize
+        // (~100 MiB, the raw jahiaFileUploadMaxSize) hit hard Cypress-runner limitations -
+        // `Cypress.Buffer.from()` and then `cy.get(...).selectFile({contents: ...})` itself both
+        // threw `RangeError: Invalid array length` on a ~100 MiB in-browser buffer.
+        // SUPPORT-646 Stage 7 fix note: `maxUploadSize` is now clamped to the real GraphQL
+        // transport ceiling (~20,000,000 characters, see the root-cause comment in
+        // 07-bulkCreateUsers-UploadLimit.cy.ts), so the file this test needs to build is now
+        // ~20 MB instead of ~100 MB - small enough that both of Stage 6's failure points no
+        // longer trigger. Re-enabled.
+        it('rejects a file larger than the queried maxUploadSize before any import mutation is fired', () => {
             cy.login();
             cy.intercept('POST', '**/modules/graphql').as('gqlCalls');
 

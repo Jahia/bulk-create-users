@@ -30,6 +30,17 @@ import static org.mockito.Mockito.when;
  * exception-masking {@code catch (Exception e)} (D6 Part B). {@link UsersHandler} itself is
  * mocked throughout, so this class never touches the orchestration logic covered by
  * {@code UsersHandlerImportTest}.
+ *
+ * <p>D6 fix note: the primary fix for D6 (a mid-batch exception discarding accumulated
+ * counts/errors) now lives inside {@link UsersHandler#importUsers} itself - see
+ * {@code UsersHandlerImportTest}'s "D6-JUnit Part A" - which no longer lets a per-row exception
+ * escape uncaught. The resolver's own {@code catch (Exception e)} is retained as a last-resort
+ * defensive fallback for a genuinely unexpected failure that isn't a per-row error (e.g. a bug
+ * unrelated to CSV row processing); {@link #maskesUnderlyingExceptionWithGenericResult()} below
+ * now documents that fallback role rather than "the bug". {@link #passesThroughPartialResultUnchanged()}
+ * is the resolver-level regression guard proving the fix: a handler result carrying partial
+ * success/error counts (the shape {@link UsersHandler} now returns after the fix) passes through
+ * the resolver completely unchanged.</p>
  */
 class BulkCreateUsersMutationTest {
 
@@ -83,6 +94,54 @@ class BulkCreateUsersMutationTest {
     }
 
     @Nested
+    @DisplayName("Bug 2 - JUnit: effectiveMaxUploadSize() clamps to the real GraphQL transport ceiling")
+    class EffectiveMaxUploadSize {
+
+        @Test
+        @DisplayName("clamps a configured limit larger than the transport ceiling down to the ceiling")
+        void clampsConfiguredLimitLargerThanCeiling() {
+            try (MockedStatic<SettingsBean> settingsMock = mockStatic(SettingsBean.class)) {
+                final SettingsBean settingsBean = mock(SettingsBean.class);
+                // Jahia's own real-world default (100 MiB), far above the ~20M-character
+                // Jackson/graphql-java-kickstart ceiling this transport can actually deliver.
+                when(settingsBean.getJahiaFileUploadMaxSize()).thenReturn(104_857_600L);
+                settingsMock.when(SettingsBean::getInstance).thenReturn(settingsBean);
+
+                assertThat(BulkCreateUsersMutation.effectiveMaxUploadSize())
+                        .isEqualTo(BulkCreateUsersMutation.GRAPHQL_JSON_VARIABLE_MAX_LENGTH);
+            }
+        }
+
+        @Test
+        @DisplayName("keeps a configured limit smaller than the transport ceiling unchanged")
+        void keepsConfiguredLimitSmallerThanCeiling() {
+            try (MockedStatic<SettingsBean> settingsMock = mockStatic(SettingsBean.class)) {
+                final SettingsBean settingsBean = mock(SettingsBean.class);
+                when(settingsBean.getJahiaFileUploadMaxSize()).thenReturn(5_000_000L);
+                settingsMock.when(SettingsBean::getInstance).thenReturn(settingsBean);
+
+                assertThat(BulkCreateUsersMutation.effectiveMaxUploadSize()).isEqualTo(5_000_000L);
+            }
+        }
+
+        @Test
+        @DisplayName("falls back to the transport ceiling when no limit is configured (0 means unlimited)")
+        void fallsBackToCeilingWhenUnconfigured() {
+            try (MockedStatic<SettingsBean> settingsMock = mockStatic(SettingsBean.class)) {
+                final SettingsBean settingsBean = mock(SettingsBean.class);
+                when(settingsBean.getJahiaFileUploadMaxSize()).thenReturn(0L);
+                settingsMock.when(SettingsBean::getInstance).thenReturn(settingsBean);
+
+                // An "unlimited" configured setting must not translate into an unenforced check -
+                // the transport genuinely cannot deliver more than ~20M characters regardless of
+                // operator configuration, so the ceiling still applies.
+                assertThat(BulkCreateUsersMutation.effectiveMaxUploadSize())
+                        .isEqualTo(BulkCreateUsersMutation.GRAPHQL_JSON_VARIABLE_MAX_LENGTH);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("F7-JUnit (re-scoped): OSGi service lookup and delegation")
     class OsgiServiceDelegation {
 
@@ -129,11 +188,39 @@ class BulkCreateUsersMutationTest {
     }
 
     @Nested
-    @DisplayName("D6-JUnit Part B (highest priority): the resolver masks a propagated exception")
+    @DisplayName("D6-JUnit Part B (fixed): resolver preserves partial results; masking is now only a last-resort fallback")
     class ExceptionMasking {
 
         @Test
-        @DisplayName("a RuntimeException from handler.importUsers is caught and turned into a generic error result")
+        @DisplayName("a handler result with partial success/error counts passes through unchanged (D6 fix verification)")
+        void passesThroughPartialResultUnchanged() throws RepositoryException {
+            try (MockedStatic<SettingsBean> settingsMock = mockStatic(SettingsBean.class);
+                 MockedStatic<JCRSessionFactory> sessionFactoryMock = mockStatic(JCRSessionFactory.class);
+                 MockedStatic<BundleUtils> bundleUtilsMock = mockStatic(BundleUtils.class)) {
+                stubNoUploadLimit(settingsMock);
+                stubGlobalScopeAuthorized(sessionFactoryMock);
+                final UsersHandler handler = mock(UsersHandler.class);
+                // Shape UsersHandler now returns after the D6 fix: earlier rows created (not
+                // wiped out) plus one real row-level error message, instead of a fabricated
+                // "Internal error" result with every count zeroed.
+                final BulkCreateUsersResult partial = new BulkCreateUsersResult(false, 2, 0, 0, 1,
+                        Collections.singletonList("Row for 'user2': failed to process due to an unexpected error"));
+                when(handler.importUsers(any(), any(), any(), any(), any(Boolean.class))).thenReturn(partial);
+                bundleUtilsMock.when(() -> BundleUtils.getOsgiService(UsersHandler.class, null)).thenReturn(handler);
+
+                final BulkCreateUsersResult result =
+                        new BulkCreateUsersMutation().importUsers(MINIMAL_CSV, ",", null, null, false);
+
+                assertThat(result).isSameAs(partial);
+                assertThat(result.isSuccess()).isFalse();
+                assertThat(result.getCreatedCount()).isEqualTo(2);
+                assertThat(result.getErrorCount()).isEqualTo(1);
+                assertThat(result.getErrors()).containsExactly("Row for 'user2': failed to process due to an unexpected error");
+            }
+        }
+
+        @Test
+        @DisplayName("a RuntimeException from handler.importUsers (genuinely unexpected, not per-row) is still caught as a last-resort fallback")
         void maskesUnderlyingExceptionWithGenericResult() throws RepositoryException {
             try (MockedStatic<SettingsBean> settingsMock = mockStatic(SettingsBean.class);
                  MockedStatic<JCRSessionFactory> sessionFactoryMock = mockStatic(JCRSessionFactory.class);
@@ -142,7 +229,7 @@ class BulkCreateUsersMutationTest {
                 stubGlobalScopeAuthorized(sessionFactoryMock);
                 final UsersHandler handler = mock(UsersHandler.class);
                 when(handler.importUsers(any(), any(), any(), any(), any(Boolean.class)))
-                        .thenThrow(new RuntimeException("simulated JCR failure"));
+                        .thenThrow(new RuntimeException("simulated catastrophic failure unrelated to row processing"));
                 bundleUtilsMock.when(() -> BundleUtils.getOsgiService(UsersHandler.class, null)).thenReturn(handler);
 
                 final BulkCreateUsersResult result =

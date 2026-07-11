@@ -5,11 +5,17 @@ import {DocumentNode} from 'graphql';
  * `bulkCreateUsers { maxUploadSize }` query, neither of which had any existing test (Java or
  * Cypress) per the Stage 2 inventory.
  *
- * The oversized payload is built by padding rows past the real configured
- * `jahiaFileUploadMaxSize` (read via the query itself) rather than lowering the server setting,
- * since this harness has no established helper for changing that setting at runtime. If Stage 6
- * finds the configured limit too large to pad to in a reasonable time/memory budget, the
- * alternative is lowering `jahiaFileUploadMaxSize` via provisioning before this spec runs.
+ * The oversized payload is built by padding rows past the queried `maxUploadSize` (read via the
+ * query itself) rather than lowering the server setting, since this harness has no established
+ * helper for changing that setting at runtime.
+ *
+ * SUPPORT-646 Stage 7 fix note: `maxUploadSize` used to return the raw configured
+ * `jahiaFileUploadMaxSize` (100 MiB by default in this environment), which Stage 6 proved is
+ * unreachable dead weight for this submission mechanism (csvContent as a plain GraphQL JSON
+ * string variable) - see the detailed root-cause comment on the second test below. Stage 7
+ * clamped the query (and the resolver's own graceful check) to the real transport ceiling, so
+ * this spec now pads to a much smaller (~20 MB instead of ~100 MB) and much faster-to-build
+ * payload than Stage 6 saw.
  */
 describe('Bulk Create Users — upload size limit (F6)', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -32,12 +38,20 @@ describe('Bulk Create Users — upload size limit (F6)', () => {
         cy.executeGroovy('groovy/deleteAllTestUsers.groovy');
     });
 
-    it('reports a positive maxUploadSize', () => {
+    it('reports a positive maxUploadSize, clamped to the real GraphQL transport ceiling (Stage 7 fix)', () => {
         cy.apollo({query: maxUploadSize})
             .its('data.bulkCreateUsers.maxUploadSize')
             .should(value => {
                 expect(value).to.be.a('number');
                 expect(value).to.be.greaterThan(0);
+                // Stage 7 fix: the advertised value must never exceed the real transport
+                // ceiling (Jackson's StreamReadConstraints.getMaxStringLength() default of
+                // 20,000,000 characters, enforced by graphql-java-kickstart before this
+                // module's own resolver ever runs - see the root-cause comment below). Before
+                // the fix this returned the raw jahiaFileUploadMaxSize (104857600 in this
+                // environment), which is well above this ceiling and therefore an unreachable,
+                // dishonest advertised limit for this submission mechanism.
+                expect(value).to.be.at.most(20_000_000);
             });
     });
 
@@ -70,23 +84,45 @@ describe('Bulk Create Users — upload size limit (F6)', () => {
 
             expect(totalBytes, 'padded payload size').to.be.greaterThan(limit);
 
-            // SUPPORT-646 Stage 6 finding (headline product-level gap, flagged for Stage 7):
-            // this request does NOT reach the module's own graceful in-resolver size check
-            // (which would return success:false/errorCount:1/the friendly
-            // "CSV payload exceeds the configured upload size limit" message). Instead, a
-            // ~100 MiB JSON POST body to /modules/graphql is rejected at a lower transport
-            // layer with a bare HTTP 400 (Bad Request, text/xml body) BEFORE GraphQL ever
-            // resolves the mutation. The production UI (createUsers.jsx) submits csvContent
-            // the exact same way (FileReader.readAsText() -> a GraphQL string variable), so a
-            // real user uploading a file near the advertised jahiaFileUploadMaxSize would hit
-            // this same generic transport failure, never seeing the module's own friendly
-            // error message - the advertised/checked limit is not actually the reachable limit
-            // for this submission path. This is a genuine, currently-existing product-level
-            // behavior (not introduced by this test), so per this stage's ground rules it is
-            // captured here as a regression guard on the ACTUAL observed behavior, exactly as
-            // D6-JUnit's Part A/B guard the current (also imperfect) uncaught-exception
-            // behavior - not fixed here. Also bump the command timeout: a ~100 MiB round trip
-            // genuinely exceeds Cypress's 4s default even for this transport-level rejection.
+            // SUPPORT-646 Stage 6 found this request does NOT reach the module's own graceful
+            // in-resolver size check (which would return success:false/errorCount:1/the friendly
+            // "CSV payload exceeds the configured upload size limit" message) for a payload built
+            // by padding past the raw jahiaFileUploadMaxSize (100 MiB). Stage 7 root-caused this
+            // precisely (confirmed via the live container's own jahia.log stack trace, not
+            // guesswork): a JSON POST body whose "variables.csvContent" string value exceeds
+            // Jackson's StreamReadConstraints.getMaxStringLength() (20,000,000 characters, the
+            // default since Jackson 2.15) is rejected by graphql-java-kickstart's
+            // GraphQLObjectMapper/VariablesDeserializer BEFORE GraphQL query parsing or this
+            // module's resolver ever run:
+            //   graphql.kickstart.servlet.InvocationInputParseException: Request parsing failed
+            //   Caused by: com.fasterxml.jackson.databind.JsonMappingException: String value
+            //     length (20000011) exceeds the maximum allowed (20000000, from
+            //     `StreamReadConstraints.getMaxStringLength()`) (through reference chain:
+            //     graphql.kickstart.execution.GraphQLRequest["variables"])
+            // This is a third-party/Jahia-core dependency (graphql-dxm-provider) ceiling this
+            // module cannot raise from its own code. The Stage 7 fix instead makes the module
+            // stop lying about the limit it can actually deliver on: `maxUploadSize` (and the
+            // resolver's own graceful check) are now clamped to this real ceiling (see
+            // BulkCreateUsersMutation#effectiveMaxUploadSize()). Because this test pads past the
+            // *queried* limit - which is now itself clamped to the transport ceiling - this
+            // request still lands past the Jackson boundary and still gets a raw transport-level
+            // HTTP 400, exactly as asserted below: for the default configuration the module's own
+            // graceful in-resolver message can never be reached by a payload this large (Jackson
+            // always rejects it first), so this remains the accurate, honestly-documented
+            // behavior rather than a bug. The module's own graceful check *is* now reachable in
+            // the one case it can matter - an operator configuring jahiaFileUploadMaxSize below
+            // this transport ceiling - see BulkCreateUsersMutationTest's "Bug 2 - JUnit" suite for
+            // that scenario (this harness has no way to reconfigure jahiaFileUploadMaxSize at
+            // runtime to exercise it live here).
+            // The client-side UX symptom (a user picking an oversized file getting a confusing
+            // raw network failure instead of a friendly message) IS fixed by this change even
+            // though this direct-API test still observes the transport 400: createUsers.jsx's
+            // pre-existing client-side size guard already compares the selected file's size
+            // against this same queried maxUploadSize before ever calling this mutation, so it
+            // now catches oversized files using the corrected (much smaller, honest) ceiling
+            // instead of the unreachable 100 MiB value - see 08-bulkCreateUsersUI-ClientGuards.cy.ts.
+            // Also bump the command timeout: a real round trip at this size can exceed Cypress's
+            // 4s default even for this transport-level rejection.
             const originalTimeout = Cypress.config('defaultCommandTimeout');
             Cypress.config('defaultCommandTimeout', 30000);
             cy.apollo({
