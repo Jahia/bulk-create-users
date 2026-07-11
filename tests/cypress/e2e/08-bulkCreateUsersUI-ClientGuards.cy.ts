@@ -61,6 +61,28 @@ describe('Bulk Create Users — UI client-side guards (U9)', () => {
             }).its('data.bulkCreateUsers.maxUploadSize').then((limit: number) => {
                 cy.visit(ADMIN_ROUTE);
 
+                // Wait for the component's own mount-time GET_MAX_UPLOAD_SIZE query to resolve
+                // before touching the file input, using the UI's own rendered evidence rather
+                // than a GraphQL network intercept: this admin shell fires many concurrent
+                // queries from unrelated modules on mount and (per two failed attempts at a
+                // network-based wait, confirmed via cy:command logs) appears to batch/interleave
+                // them in a way that made matching "the" component's own request by
+                // operationName unreliable - one attempt matched this test's OWN pre-fetch
+                // request instead (resolving instantly, before cy.visit() had even run), and a
+                // second attempt (armed only after the pre-fetch) then never matched anything and
+                // timed out. Waiting on `#bcu-file-hint` containing "Maximum file size" is a
+                // direct, robust signal of the exact thing this test actually depends on: the
+                // component's local `maxSize` state (and therefore handleFileChange's size guard)
+                // is populated, since that hint text is conditional on
+                // `typeof maxSizeMb === 'number'` (see createUsers.jsx). Without this wait,
+                // selectFile can fire while `maxSize` is still `undefined`, in which case
+                // handleFileChange's guard silently no-ops and the oversized file sails through
+                // unrejected - a genuine pre-existing timing race that Stage 6 could never
+                // observe (this test was skipped there for an unrelated reason - see above) and
+                // that only became reachable once Stage 7 shrank the required payload enough for
+                // selectFile to succeed at all.
+                cy.get('#bcu-file-hint', {timeout: 5000}).should('contain', 'Maximum file size');
+
                 const oversizedContent = 'j:nodename,j:password,j:firstName,j:lastName\n' +
                     'a'.repeat(Math.max(limit + 1024, 1024));
                 cy.get('input[name="csvFile"]').selectFile({
