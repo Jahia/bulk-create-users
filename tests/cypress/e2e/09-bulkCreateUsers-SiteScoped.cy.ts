@@ -12,10 +12,9 @@ import {createSite, deleteSite, createUser, deleteUser as deleteUserByName, gran
  *  - F9-SiteScoped: the site-scoped branch of isAuthorizedForScope accepts siteAdminUsers on the
  *    target site without requiring the global adminUsersBulkCreate permission, and separately
  *    denies a caller who holds only the global permission for a site they do not administer.
- *  - F12-PerSiteRoute: the per-site admin screen renders and getSiteKey() resolves the visited
- *    site so an import with no explicit siteKey argument is still scoped correctly.
- *  - U10: getSiteKey()'s URL-path heuristic - the per-site route resolves a real siteKey while
- *    both the server route and an unexpected path shape fall back to global (siteKey: null).
+ *  - F12-PerSiteRoute / U10: originally intended to also cover the per-site admin screen's UI-driven
+ *    import flow and getSiteKey()'s URL-path heuristic directly; see the "SUPPORT-646 correction
+ *    (part 3)" note below for why that coverage was removed rather than fixed.
  *
  * All four users/roles below are provisioned once and shared across this file's describe blocks
  * to amortize the site-provisioning cost (per the gap list's dependency note for items 22-26).
@@ -69,6 +68,42 @@ import {createSite, deleteSite, createUser, deleteUser as deleteUserByName, gran
  * entry point from a user holding only the global permission") are restored below, unaffected by
  * this fix, verified passing.
  *
+ * SUPPORT-646 correction (part 3): the two other UI-based tests under "F12-PerSiteRoute and U10"
+ * were ALSO previously `it.skip`-ed under the same disproven cache-staleness framing above. Both
+ * were REMOVED entirely, not fixed, at the time:
+ * - "falls back to a null siteKey on an unexpected/malformed path shape": its premise was wrong
+ *   per direct product knowledge - Jahia's admin-console routing has no "render with a fallback
+ *   siteKey" behavior for an unrecognized path shape; there is no route match at all, so there was
+ *   nothing real for this test to exercise. This removal stands.
+ * - "scopes an import with no explicit siteKey...": at the time, ruled out timing and cross-test
+ *   contamination but could not reconcile the automated failure with direct manual verification
+ *   that the feature works, and was removed per product-owner direction rather than left as
+ *   unexplained debt. **RESTORED** below once part 4 identified the real cause (the same wrong
+ *   route constant, not something specific to this test) - see below.
+ *
+ * SUPPORT-646 correction (part 4 - the REAL root cause of the whole per-site UI rendering mystery):
+ * `SITE_ADMIN_ROUTE` itself was wrong. The per-site admin route is registered (registerRoutes.js,
+ * `administration-sites:999` target, route id `bulkCreateSiteUsers`) at
+ * `/jahia/administration/<siteKey>/bulkCreateSiteUsers` - not
+ * `/jahia/administration/<siteKey>/settings/bulkCreateUsers`, which every UI test in this file
+ * (including the already-removed ones and the still-skipped ones above) was actually visiting.
+ * That URL matched no registered route at all, so nothing ever rendered there - this was the true
+ * cause of "component never renders," not a timing issue, not cross-test contamination, and not a
+ * platform/staleness problem. Fixed the constant to the real route.
+ *
+ * Fixing the constant exposed a second, genuine, previously-hidden PRODUCT bug: `getSiteKey()` in
+ * `createUsers.jsx` checked for a 3-segment URL shape ending in `settings/bulkCreateUsers`, which
+ * can never match the real 2-segment `<siteKey>/bulkCreateSiteUsers` shape - the "infer site from
+ * URL" feature (F12-PerSiteRoute / U10) never actually worked in the shipped code. Fixed
+ * `getSiteKey()` to match the real URL shape.
+ *
+ * F12-PerSiteRoute / U10 coverage in this file is now: "renders the same CreateUsers screen...",
+ * "scopes an import with no explicit siteKey..." (both restored/fixed against the real route),
+ * and "hides the per-site entry point..." below, plus the site-scoping logic covered at the API
+ * level by "creates a site-scoped user via the direct API..." above. Only the malformed-path
+ * fallback remains uncovered, because its premise was independently confirmed wrong regardless of
+ * the route bug (see part 3 above).
+ *
  * Test ORDER note: as a defensive precaution, the one test that visits the broken (403) per-site
  * route without needing to be skipped ("hides the per-site entry point...") is deliberately
  * placed LAST in this file, after every other real assertion, in case visiting that route has
@@ -82,10 +117,26 @@ import {createSite, deleteSite, createUser, deleteUser as deleteUserByName, gran
 describe('Bulk Create Users — site-scoped behavior', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const findUserNodeByQuery: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/findUserNodeByQuery.graphql');
+
+    // SUPPORT-646: `getUserPath()`/`lookupUser(name, site)` cannot reliably prove a user is
+    // ABSENT from a specific site. Jahia core's `JahiaUserManagerService.lookupUser(name, site)`
+    // defaults `checkSiteAndGlobalUsers` to true, which - whenever a non-null site is passed -
+    // checks the GLOBAL scope FIRST before falling back to the site-scoped lookup. A user that
+    // only exists globally is therefore still "found" by `getUserPath(username, SITE_KEY)`, making
+    // a `.should('be.null')` assertion against it unreliable. A direct JCR-SQL2 query scoped with
+    // ISDESCENDANTNODE to the site's own users subtree has no such fallback and is the only way to
+    // prove exactly where a user node does or does not live.
+    const isUserUnderPath = (username: string, path: string): Cypress.Chainable<boolean> =>
+        cy.apollo({
+            query: findUserNodeByQuery,
+            variables: {sql: `SELECT * FROM [jnt:user] AS n WHERE ISDESCENDANTNODE(n, '${path}') AND n.[j:nodename] = '${username}'`}
+        }).its('data.jcr.nodesByQuery.nodes').then((nodes: unknown[]) => nodes.length === 1);
 
     const SITE_KEY = 'bcuSiteScopedTest';
     const SERVER_ADMIN_ROUTE = '/jahia/administration/bulkCreateUsers';
-    const SITE_ADMIN_ROUTE = `/jahia/administration/${SITE_KEY}/settings/bulkCreateUsers`;
+    const SITE_ADMIN_ROUTE = `/jahia/administration/${SITE_KEY}/bulkCreateSiteUsers`;
     const PASSWORD = 'BcuSiteTest9Pwd';
 
     // Holds ONLY siteAdminUsers (via the built-in site-administrator role) on the test site -
@@ -168,94 +219,89 @@ describe('Bulk Create Users — site-scoped behavior', () => {
     // ─── F12-PerSiteRoute / U10: the per-site screen resolves its own site key ───
 
     describe('F12-PerSiteRoute and U10: getSiteKey() URL-path heuristic', () => {
-        // Skipped after real investigation, not a first-guess dismissal. This exact
-        // visit-CSV-submit-assert flow is proven reliable elsewhere in the suite (specs
-        // 02/03/04 exercise it repeatedly without issue) and this test's own mechanism was
-        // never in doubt. In this spec file specifically it reproducibly hits an uncaught
-        // `TypeError: g is not a function` in a minified `jcontent` bundle (a Jahia-core UI
-        // bundle, not this module's code) right after the mutation fires, preceded by dozens of
-        // "Unsatisfied version ..." shared-singleton warnings for react/redux/moonstone/etc -
-        // confirmed via server + browser console logs to be a real module-version mismatch in
-        // this Docker image. This test does not depend on the site-scoped fix at all (it visits
-        // only the server/global route) - it is unaffected by both the Stage 8 provisioning fix
-        // and the Stage 8 session-staleness finding documented at the top of this file; it
-        // remains a separate, still-unresolved environment issue.
-        // eslint-disable-next-line mocha/no-skipped-tests
-        it.skip('falls back to a null siteKey on the server (global) route', () => {
+        // This exact visit-CSV-submit-assert flow is proven reliable elsewhere in the suite (specs
+        // 02/03/04 exercise it repeatedly without issue) and this test's own mechanism was never
+        // in doubt. In this spec file specifically it reproducibly hits an uncaught `TypeError: g
+        // is not a function` in a minified `jcontent` bundle (a Jahia-core UI bundle, not this
+        // module's code) right after the mutation fires, preceded by dozens of "Unsatisfied
+        // version ..." shared-singleton warnings for react/redux/moonstone/etc - confirmed via
+        // server + browser console logs to be a real module-version mismatch in this Docker image.
+        // This test does not depend on the site-scoped fix at all (it visits only the server/global
+        // route) - it is unaffected by both the Stage 8 provisioning fix and the Stage 8
+        // session-staleness finding documented at the top of this file; the jcontent crash remains
+        // a separate, still-unresolved environment issue.
+        //
+        // SUPPORT-646 correction: previously intercepted the BulkCreateUsersImport GraphQL call and
+        // asserted its siteKey variable directly, which failed - `#bcu-result` was confirmed to
+        // still become visible (the import completes and the UI shows success), but the SEPARATE
+        // `cy.get('@gqlCallsGlobal.all')` request-introspection lookup afterward could not find the
+        // expected call, apparently interfered with by the jcontent crash's effect on Cypress's own
+        // in-browser network interception, independent of whether the import actually succeeded
+        // server-side. Checks the real outcome instead (mirroring the pattern used elsewhere in
+        // this file): does the imported user end up at the global scope (not scoped to any site) -
+        // via a fresh getUserPath() query issued after logging back in, decoupled entirely from the
+        // crashed page and its interception state.
+        it('falls back to a null siteKey on the server (global) route', () => {
+            const username = uniqueUsername('bcu-site-global-user');
             cy.login();
-            cy.intercept('POST', '**/modules/graphql').as('gqlCallsGlobal');
             cy.visit(SERVER_ADMIN_ROUTE);
-            cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
+            cy.get('input[name="csvFile"]').selectFile({
+                contents: Cypress.Buffer.from(`j:nodename,j:password,j:firstName,j:lastName\n${username},TestPass1234!,Alice,Smith`),
+                fileName: 'valid-users.csv'
+            }, {force: true});
             cy.get('#bcu-submit').click();
             cy.get('#bcu-result', {timeout: 15000}).should('be.visible');
 
-            cy.get('@gqlCallsGlobal.all').then((calls: unknown[]) => {
-                const importCall = (calls as Array<{request: {body?: {operationName?: string; variables?: {siteKey?: string | null}}}}>)
-                    .find(call => call.request?.body?.operationName === 'BulkCreateUsersImport');
-                expect(importCall, 'BulkCreateUsersImport request').to.exist;
-                expect(importCall?.request.body?.variables?.siteKey, 'siteKey variable').to.be.null;
-            });
+            cy.login();
+            getUserPath(username, '').its('data.admin.userAdmin.user.node.path')
+                .should('contain', '/users/');
+            // SQL2, not getUserPath(username, SITE_KEY) - see the isUserUnderPath() comment above:
+            // lookupUser's global-first fallback would find this genuinely-global user regardless
+            // of the site argument, making a getUserPath-based "not in this site" check unreliable.
+            isUserUnderPath(username, `/sites/${SITE_KEY}/users`).should('be.false');
         });
 
-        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
-        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
-        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
-        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
-        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
-        // eslint-disable-next-line mocha/no-skipped-tests
-        it.skip('scopes an import with no explicit siteKey to the visited site when using the per-site route', () => {
+        // SUPPORT-646 correction: RESTORED. Previously removed because the failure (`#bcu-csv-file`
+        // never appearing) could not be reconciled with direct manual verification that the
+        // feature works - see part 4 of the file-level doc comment: the real cause was
+        // `SITE_ADMIN_ROUTE` visiting a URL with no matching registered route at all, not a
+        // timing/contamination/staleness issue. Now uses the corrected route and the
+        // real-outcome assertion style (getUserPath, proven safe for a "present at this site" /
+        // "absent globally" check - see the isUserUnderPath() comment above for the one direction
+        // of this check that would NOT be safe with getUserPath).
+        it('scopes an import with no explicit siteKey to the visited site when using the per-site route', () => {
+            const username = uniqueUsername('bcu-site-ui-user');
             cy.login(SITE_ADMIN_USER, PASSWORD);
-            cy.intercept('POST', '**/modules/graphql').as('gqlCalls');
             cy.visit(SITE_ADMIN_ROUTE);
-            cy.get('#bcu-csv-file').should('exist');
-            cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/valid-site-scoped-user.csv', {force: true});
+            cy.get('#bcu-csv-file', {timeout: 15000}).should('exist');
+            cy.get('input[name="csvFile"]').selectFile({
+                contents: Cypress.Buffer.from(`j:nodename,j:password,j:firstName,j:lastName\n${username},TestPass1234!,Alice,Smith`),
+                fileName: 'valid-site-scoped-user.csv'
+            }, {force: true});
             cy.get('#bcu-submit').click();
             cy.get('[id="bcu-message-success"]', {timeout: 15000}).should('be.visible');
 
-            cy.get('@gqlCalls.all').then((calls: unknown[]) => {
-                const importCall = (calls as Array<{request: {body?: {operationName?: string; variables?: {siteKey?: string}}}}>)
-                    .find(call => call.request?.body?.operationName === 'BulkCreateUsersImport');
-                expect(importCall, 'BulkCreateUsersImport request').to.exist;
-                expect(importCall?.request.body?.variables?.siteKey, 'siteKey variable').to.eq(SITE_KEY);
-            });
-
-            getUserPath('bcu-site-test-user1', SITE_KEY).its('data.admin.userAdmin.user.node.path')
+            cy.login();
+            getUserPath(username, SITE_KEY).its('data.admin.userAdmin.user.node.path')
                 .should('contain', `/sites/${SITE_KEY}/`);
+            getUserPath(username, '').its('data.admin.userAdmin.user')
+                .should('be.null');
         });
 
-        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
-        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
-        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
-        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
-        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
-        // eslint-disable-next-line mocha/no-skipped-tests
-        it.skip('falls back to a null siteKey on an unexpected/malformed path shape', () => {
-            cy.login(SITE_ADMIN_USER, PASSWORD);
-            cy.intercept('POST', '**/modules/graphql').as('gqlCallsMalformed');
-            // Deliberately not the exact "<site>/settings/bulkCreateUsers" shape getSiteKey()
-            // requires (extra segment) - the route still renders (same registered route target)
-            // but getSiteKey()'s string-parsing heuristic should not resolve a site.
-            cy.visit(`/jahia/administration/${SITE_KEY}/settings/bulkCreateUsers/extra`, {failOnStatusCode: false});
-            cy.get('[class*="bcu_root"]').then($root => {
-                if ($root.length === 0) {
-                    // The malformed path may not even route to the component in some Jahia
-                    // versions; if so, this sub-assertion is inconclusive rather than false.
-                    cy.log('Malformed path did not render the CreateUsers component - route shape assumption needs revisiting in Stage 6');
-                    return;
-                }
-
-                cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/valid-users.csv', {force: true});
-                cy.get('#bcu-submit').click();
-                cy.get('#bcu-result', {timeout: 15000}).should('be.visible');
-
-                cy.get('@gqlCallsMalformed.all').then((calls: unknown[]) => {
-                    const importCall = (calls as Array<{request: {body?: {operationName?: string; variables?: {siteKey?: string | null}}}}>)
-                        .find(call => call.request?.body?.operationName === 'BulkCreateUsersImport');
-                    expect(importCall, 'BulkCreateUsersImport request').to.exist;
-                    expect(importCall?.request.body?.variables?.siteKey, 'siteKey variable').to.be.null;
-                });
-            });
-        });
+        // SUPPORT-646 correction: removed. This test's premise was wrong, not just its
+        // implementation - per direct product knowledge, Jahia's admin-console routing has no
+        // "render the same component with a null/fallback siteKey" behavior for an unrecognized
+        // path shape; there is no route match at all, so there is nothing for getSiteKey() to be
+        // exercised against in the first place. The removed graceful-degradation branch in the
+        // original version of this test (`if ($root.length === 0) { ...inconclusive... }`) was
+        // itself dead code regardless (a plain `cy.get(selector)` retries for its timeout and hard
+        // -fails on zero matches rather than resolving with an empty result), but that bug was a
+        // symptom of testing a scenario that doesn't exist in the product, not the real issue.
+        // No Jest/unit test exists for `getSiteKey()` as a pure function - this repo has no
+        // `.test.js`/`.test.jsx` files at all for its JS source. Removing this Cypress test leaves
+        // the malformed-path branch of `getSiteKey()` with no coverage anywhere, which is an
+        // accepted, deliberate trade-off given the scenario it existed to prove doesn't occur in
+        // practice (there is no route for it to be reached through), not an oversight.
     });
 
     // ─── U7: per-site route exists, is distinct, and is permission-gated ─────────
@@ -265,13 +311,17 @@ describe('Bulk Create Users — site-scoped behavior', () => {
     // that corruption cannot affect any other test in this spec file.
 
     describe('U7: per-site admin route registration', () => {
-        // Skipped: session/node-cache staleness issue (see file-level doc comment). Stage 9
-        // genuinely tried flushing the site's cache (jcontent.flushSiteCache) right after
-        // createSite() in before(), confirmed via an assertion that the flush itself succeeded,
-        // and it did NOT resolve this - reproduced across 2 independent runs (flush alone, and
-        // flush + a bounded 2s wait). Still needs product/platform-side investigation.
-        // eslint-disable-next-line mocha/no-skipped-tests
-        it.skip('renders the same CreateUsers screen at a URL distinct from the server route', () => {
+        // SUPPORT-646 correction: this test's real blocker was neither session/cache staleness
+        // nor a timing issue - `SITE_ADMIN_ROUTE` itself was wrong. The registered per-site route
+        // (registerRoutes.js, `administration-sites:999` target) resolves to
+        // `/jahia/administration/<siteKey>/bulkCreateSiteUsers`, not
+        // `/jahia/administration/<siteKey>/settings/bulkCreateUsers` - the constant was visiting a
+        // URL with no matching registered route at all, so of course nothing ever rendered there.
+        // Fixed the constant to the real route, which also exposed (and fixed, in
+        // createUsers.jsx) a genuine product bug: getSiteKey()'s URL-parsing check required the
+        // wrong shape (3 segments incl. "settings", ending in "bulkCreateUsers") and could never
+        // have matched the real 2-segment URL - the "infer site from URL" feature never worked.
+        it('renders the same CreateUsers screen at a URL distinct from the server route', () => {
             cy.login(SITE_ADMIN_USER, PASSWORD);
             cy.visit(SITE_ADMIN_ROUTE);
             expect(SITE_ADMIN_ROUTE).to.not.eq(SERVER_ADMIN_ROUTE);
