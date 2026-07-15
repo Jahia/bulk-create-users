@@ -6,8 +6,13 @@ import {BULK_CREATE_USERS_IMPORT, GET_MAX_UPLOAD_SIZE} from './CreateUsers.gql';
 import styles from './createUsers.scss';
 
 const getSiteKey = () => {
+    // SUPPORT-646 fix: the registered per-site admin route (registerRoutes.js,
+    // `administration-sites:999` target) resolves to `/jahia/administration/<siteKey>/bulkCreateSiteUsers`
+    // - two path segments, no `settings` segment. The previous 3-segment/`settings`-based check
+    // never matched this real URL shape, so this always returned null on the per-site route -
+    // the "infer site from URL" feature never actually worked.
     const parts = window.location.pathname.replace(/^\/jahia\/administration\//, '').split('/').filter(Boolean);
-    return (parts.length === 3 && parts[1] === 'settings' && parts[2] === 'bulkCreateUsers') ? parts[0] : null;
+    return (parts.length === 2 && parts[1] === 'bulkCreateSiteUsers') ? parts[0] : null;
 };
 
 // Columns that must be present in every CSV row (non-negotiable)

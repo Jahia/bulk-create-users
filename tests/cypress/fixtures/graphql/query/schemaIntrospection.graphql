@@ -1,0 +1,7 @@
+query BulkCreateUsersTypeIntrospection($typeName: String!) {
+    type: __type(name: $typeName) {
+        fields {
+            name
+        }
+    }
+}

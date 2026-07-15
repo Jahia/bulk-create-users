@@ -39,8 +39,6 @@ describe('Bulk Create Users — permission enforcement', () => {
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const deleteAllUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/deleteUser.graphql');
 
     const errorsOf = (result: {graphQLErrors?: Array<{message: string}>; errors?: Array<{message: string}>}) =>
         result.graphQLErrors ?? result.errors ?? [];
@@ -65,9 +63,13 @@ describe('Bulk Create Users — permission enforcement', () => {
     after(() => {
         cy.apolloClient(); // reset the current Apollo client back to root
         cy.login();
-        // deleteAllUsers removes all non-root/non-guest users, which also clears the
-        // user imported by the allow test; the explicit calls below keep intent clear.
-        cy.apollo({mutation: deleteAllUsers, failOnStatusCode: false});
+        // See SUPPORT-646 Stage 6: the previous deleteAllUsers (deleteUser.graphql) used a
+        // raw JCR mutateNodesByQuery delete, which Jahia rejects for jnt:user nodes
+        // (AccessDeniedException), silently swallowed by failOnStatusCode: false. The
+        // groovy-backed cleanup script removes all non-root/non-guest users, which also
+        // clears the user imported by the allow test; the explicit deleteUser calls below
+        // keep intent clear.
+        cy.executeGroovy('groovy/deleteAllTestUsers.groovy');
         deleteUser(IMPORTED_USER);
         deleteUser(DENIED_USER);
         deleteUser(ALLOWED_USER);

@@ -1,0 +1,9 @@
+query FindUserNodeByQuery($sql: String!) {
+    jcr {
+        nodesByQuery(query: $sql, queryLanguage: SQL2) {
+            nodes {
+                path
+            }
+        }
+    }
+}

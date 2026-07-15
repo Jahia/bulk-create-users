@@ -1,0 +1,10 @@
+query BulkCreateUsersGroupMembership($username: String!, $siteKey: String, $groupName: String!) {
+    admin {
+        userAdmin {
+            user(username: $username, site: $siteKey) {
+                username
+                isMember: memberOf(group: $groupName, site: $siteKey)
+            }
+        }
+    }
+}

@@ -1,14 +1,14 @@
-import {DocumentNode} from 'graphql';
-
 describe('Bulk Create Users — UI Import flow', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const deleteUser: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/deleteUser.graphql');
-
     const ADMIN_ROUTE = '/jahia/administration/bulkCreateUsers';
 
+    // See SUPPORT-646 Stage 6: the previous deleteUser.graphql cleanup used a raw JCR
+    // mutateNodesByQuery delete, which Jahia rejects for jnt:user nodes
+    // (AccessDeniedException), silently swallowed by failOnStatusCode: false (the
+    // `variables: {path: ...}` it was called with here were also ignored - the query never
+    // referenced that variable). Use the proper JahiaUserManagerService-backed cleanup
+    // script instead.
     const deleteTestUsers = () => {
-        cy.apollo({mutation: deleteUser, variables: {path: '/users/bcu-test-user1'}, failOnStatusCode: false});
-        cy.apollo({mutation: deleteUser, variables: {path: '/users/bcu-test-user2'}, failOnStatusCode: false});
+        cy.executeGroovy('groovy/deleteAllTestUsers.groovy');
     };
 
     before(() => {

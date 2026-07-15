@@ -4,10 +4,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -179,6 +181,109 @@ class UsersHandlerTest {
         @DisplayName("null group name is not denied")
         void nullGroupNotDenied() {
             assertThat(UsersHandler.isGroupDenied(null)).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("sanitizeForLog (U6)")
+    class LogSanitization {
+
+        @Test
+        @DisplayName("replaces CR, LF and tab with underscore to prevent log-line injection")
+        void stripsControlCharacters() {
+            assertThat(UsersHandler.sanitizeForLog("bad\r\nname\twith\ttabs"))
+                    .isEqualTo("bad__name_with_tabs");
+        }
+
+        @Test
+        @DisplayName("truncates to 200 characters and appends '...' when longer")
+        void truncatesLongValues() {
+            final String longValue = repeat('a', 250);
+
+            final String sanitized = UsersHandler.sanitizeForLog(longValue);
+
+            assertThat(sanitized).hasSize(200 + 3).endsWith("...").startsWith(repeat('a', 200));
+        }
+
+        @Test
+        @DisplayName("does not truncate a value exactly at the 200-character limit")
+        void doesNotTruncateAtExactLimit() {
+            final String exactly200 = repeat('a', 200);
+
+            assertThat(UsersHandler.sanitizeForLog(exactly200)).isEqualTo(exactly200);
+        }
+
+        @Test
+        @DisplayName("returns null unchanged (null passthrough)")
+        void nullPassesThrough() {
+            assertThat(UsersHandler.sanitizeForLog(null)).isNull();
+        }
+
+        private String repeat(char c, int count) {
+            final StringBuilder sb = new StringBuilder(count);
+            for (int i = 0; i < count; i++) {
+                sb.append(c);
+            }
+            return sb.toString();
+        }
+    }
+
+    @Nested
+    @DisplayName("parseGroupTokens (F3 — GROUP_PATTERN multi-token parsing)")
+    class GroupTokenParsing {
+
+        @Test
+        @DisplayName("extracts a single bracketed group")
+        void extractsSingleGroup() {
+            assertThat(UsersHandler.parseGroupTokens("[privileged]")).containsExactly("privileged");
+        }
+
+        @Test
+        @DisplayName("extracts multiple bracketed groups in order")
+        void extractsMultipleGroups() {
+            assertThat(UsersHandler.parseGroupTokens("[group1],[group2],[group3]"))
+                    .containsExactly("group1", "group2", "group3");
+        }
+
+        @Test
+        @DisplayName("trims inner whitespace from each token")
+        void trimsInnerWhitespace() {
+            assertThat(UsersHandler.parseGroupTokens("[ group1 ],[  group2  ]"))
+                    .containsExactly("group1", "group2");
+        }
+
+        @Test
+        @DisplayName("ignores empty brackets")
+        void ignoresEmptyBrackets() {
+            assertThat(UsersHandler.parseGroupTokens("[],[group1],[]"))
+                    .containsExactly("group1");
+        }
+
+        @Test
+        @DisplayName("ignores brackets containing only whitespace")
+        void ignoresWhitespaceOnlyBrackets() {
+            assertThat(UsersHandler.parseGroupTokens("[   ],[group1]"))
+                    .containsExactly("group1");
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @DisplayName("returns an empty list for null or empty input")
+        void returnsEmptyListForNullOrEmpty(String groups) {
+            assertThat(UsersHandler.parseGroupTokens(groups)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("returns an empty list for a blank (whitespace-only) input")
+        void returnsEmptyListForBlank() {
+            assertThat(UsersHandler.parseGroupTokens("   ")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("ignores text outside of brackets")
+        void ignoresTextOutsideBrackets() {
+            List<String> tokens = UsersHandler.parseGroupTokens("noise[group1]more noise[group2]");
+            assertThat(tokens).containsExactly("group1", "group2");
         }
     }
 }
