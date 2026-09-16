@@ -1,0 +1,21 @@
+name: Nightly Test run (Jahia Snapshot)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  '0 3 * * *'
+
+jobs:
+  integration-tests-sn:
+    name: Integration Tests (Jahia SN)
+    secrets: inherit
+    uses: Jahia/jahia-modules-action/.github/workflows/reusable-integration-tests.yml@v2
+    with:
+      module_id: bulk-create-users
+      module_branch: main
+      jahia_image: ghcr.io/jahia/jahia-ee-dev:8-SNAPSHOT
+      provisioning_manifest: provisioning-manifest-snapshot.yml
+      incident_service: bulk-create-users-JahiaSN
+      testrail_project: Bulk Create Users Module
+      artifact_prefix: bcu-nightly-sn
+      timeout_job: 45
