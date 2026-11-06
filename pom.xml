@@ -110,7 +110,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>33.3.1-jre</version>
+      <version>33.7.2-jre</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -176,7 +176,7 @@
       <plugin>
         <groupId>com.github.eirslett</groupId>
         <artifactId>frontend-maven-plugin</artifactId>
-        <version>1.15.0</version>
+        <version>1.15.4</version>
         <executions>
           <execution>
             <id>npm install node and yarn</id>
@@ -185,7 +185,7 @@
               <goal>install-node-and-yarn</goal>
             </goals>
             <configuration>
-              <nodeVersion>v22.6.0</nodeVersion>
+              <nodeVersion>v22.20.0</nodeVersion>
               <yarnVersion>v1.22.21</yarnVersion>
             </configuration>
           </execution>
