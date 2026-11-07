@@ -34,6 +34,13 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "react-redux"
         update-types: ["version-update:semver-major"]
+      # Babel 8 (#53: preset-env 8, plugin-transform-classes 8): needs @babel/core 8,
+      # Node >= 22.18 and a coordinated plugin migration.
+      - dependency-name: "@babel/*"
+        update-types: ["version-update:semver-major"]
+      # ESLint 10 drops eslintrc support; @jahia/eslint-config 2.x and .eslintrc are eslintrc-based.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   # Cypress end-to-end test harness
   - package-ecosystem: "npm"
@@ -70,3 +77,6 @@ updates:
       # frontend-maven-plugin 2.x requires a Java 17 Maven runtime
       - dependency-name: "com.github.eirslett:frontend-maven-plugin"
         update-types: ["version-update:semver-major"]
+      # OSGi spec artifacts (e.g. DS annotations 1.5) raise Require-Capability /
+      # Import-Package floors above what Jahia 8.2 provides (Felix SCR 2.1.30 = DS 1.4).
+      - dependency-name: "org.osgi:*"
