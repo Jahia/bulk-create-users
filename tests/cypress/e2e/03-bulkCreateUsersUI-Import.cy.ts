@@ -76,12 +76,15 @@ describe('Bulk Create Users — UI Import flow', () => {
             cy.get('#bcu-result-skipped').invoke('text').then(Number).should('be.greaterThan', 0);
         });
 
-        it('shows error message for CSV missing required columns', () => {
+        it('names the missing required columns and keeps Submit disabled', () => {
             cy.login();
             cy.visit(ADMIN_ROUTE);
             cy.get('input[name="csvFile"]').selectFile('cypress/fixtures/csv/missing-columns.csv', {force: true});
-            cy.get('#bcu-submit').click();
-            cy.get('[id="bcu-message-error"]', {timeout: 15000}).should('be.visible');
+            cy.get('#bcu-missing-required', {timeout: 5000})
+                .should('contain', 'Required columns not found in CSV')
+                .and('contain', 'j:nodename')
+                .and('contain', 'j:password');
+            cy.get('#bcu-submit').should('be.disabled');
         });
 
         it('clears result box after Cancel', () => {
@@ -92,7 +95,7 @@ describe('Bulk Create Users — UI Import flow', () => {
             cy.get('#bcu-result', {timeout: 15000}).should('be.visible');
             cy.get('#bcu-cancel').click();
             cy.get('#bcu-result').should('be.empty')
-              .and('match', ':empty');
+                .and('match', ':empty');
         });
     });
 });
