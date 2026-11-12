@@ -10,7 +10,6 @@ import {createUser, deleteUser as deleteUserByName, addUserToGroup} from '@jahia
  * renamed/different `administrators`-group member, closing the gap the pipeline flagged.
  */
 describe('Bulk Create Users — broader administrators-group protection (D2)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
 
     const SECOND_ADMIN_USER = 'bcuSecondAdmin';

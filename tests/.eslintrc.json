@@ -2,10 +2,14 @@
   "root": true,
   "extends": ["@jahia/eslint-config"],
   "parser": "@typescript-eslint/parser",
-  "plugins": ["@typescript-eslint"],
+  "plugins": ["@typescript-eslint", "chai-friendly"],
+  "env": {"mocha": true},
+  "globals": {"cy": "readonly", "Cypress": "readonly", "CypressCommandLine": "readonly"},
   "rules": {
     "no-unused-vars": "off",
     "@typescript-eslint/no-unused-vars": ["error"],
-    "react/prop-types": "off"
+    "react/prop-types": "off",
+    "no-unused-expressions": "off",
+    "chai-friendly/no-unused-expressions": "error"
   }
 }

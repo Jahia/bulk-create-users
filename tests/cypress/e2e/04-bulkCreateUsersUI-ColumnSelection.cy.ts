@@ -95,7 +95,7 @@ describe('Bulk Create Users — UI Column Selection', () => {
             // Restore comma
             cy.get('#bcu-delimiter').clear().type(',');
             cy.get('#bcu-missing-required').should('be.empty')
-            .and('match', ':empty');
+                .and('match', ':empty');
         });
 
         it('clears column section after Cancel', () => {

@@ -10,6 +10,12 @@
  *  3. The delimiter <Input> has a hard maxLength={1}, so a direct keystroke of ";;" can never
  *     produce a 2-character value in the DOM - the UI-side counterpart to D5.
  */
+const assertNoImportCalls = (calls: unknown[]) => {
+    const importCalls = (calls as Array<{request: {body?: {operationName?: string}}}>)
+        .filter(call => call.request?.body?.operationName === 'BulkCreateUsersImport');
+    expect(importCalls, 'BulkCreateUsersImport mutation calls').to.have.length(0);
+};
+
 describe('Bulk Create Users — UI client-side guards (U9)', () => {
     const ADMIN_ROUTE = '/jahia/administration/bulkCreateUsers';
 
@@ -55,7 +61,6 @@ describe('Bulk Create Users — UI client-side guards (U9)', () => {
             // Read the real configured limit independently (same query the component itself
             // fires on mount) so the oversized fixture is guaranteed to exceed it.
             cy.apollo({
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
                 query: require('graphql-tag/loader!../fixtures/graphql/query/maxUploadSize.graphql'),
                 log: false
             }).its('data.bulkCreateUsers.maxUploadSize').then((limit: number) => {
@@ -96,11 +101,7 @@ describe('Bulk Create Users — UI client-side guards (U9)', () => {
                     .and('contain', 'File size must be less than');
                 cy.get('#bcu-columns').should('not.exist');
 
-                cy.get('@gqlCalls.all').then((calls: unknown[]) => {
-                    const importCalls = (calls as Array<{request: {body?: {operationName?: string}}}>)
-                        .filter(call => call.request?.body?.operationName === 'BulkCreateUsersImport');
-                    expect(importCalls, 'BulkCreateUsersImport mutation calls').to.have.length(0);
-                });
+                cy.get('@gqlCalls.all').then(assertNoImportCalls);
             });
         });
     });
