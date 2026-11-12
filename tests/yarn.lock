@@ -1818,7 +1818,7 @@
   resolved "https://registry.yarnpkg.com/@eslint/js/-/js-8.57.1.tgz#de633db3ec2ef6a3c89e2f19038063e8a122e2c2"
   integrity sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==
 
-"@faker-js/faker@^10.6.0":
+"@faker-js/faker@^10.3.0", "@faker-js/faker@^10.6.0":
   version "10.6.0"
   resolved "https://registry.yarnpkg.com/@faker-js/faker/-/faker-10.6.0.tgz#b6b0248f0f59e0ac69ad6803167d58bb824f929d"
   integrity sha512-3RQHgEtvL1Frl/d1cSreo7qhJ3Gk1OdNUai/CtZ8G+wYeRQnJih3s9xJ9/kgYekPQRdwgh0HXRPqMlzWGwivIQ==
@@ -1875,15 +1875,19 @@
   resolved "https://registry.yarnpkg.com/@istanbuljs/schema/-/schema-0.1.6.tgz#8dc9afa2ac1506cb1a58f89940f1c124446c8df3"
   integrity sha512-+Sg6GCR/wy1oSmQDFq4LQDAhm3ETKnorxN+y5nbLULOR3P0c14f2Wurzj3/xqPXtasLFfHd5iRFQ7AJt4KH2cw==
 
-"@jahia/cypress@^7.0.0":
-  version "7.4.0"
-  resolved "https://registry.yarnpkg.com/@jahia/cypress/-/cypress-7.4.0.tgz#6e20a77424dfb29c0ff81d36881f8e9740faf7ac"
-  integrity sha512-SfStNri0884of+JijefySK2XNDO3OKFYOG6d1IV6g0rR7/eyPFFD+QfPQdzFxmf5qSOjNRf8+jRazoVQaAFjrw==
+"@jahia/cypress@^8.9.0":
+  version "8.9.0"
+  resolved "https://registry.yarnpkg.com/@jahia/cypress/-/cypress-8.9.0.tgz#9c4b732a291dcb2993f9024073c7d8df9fcf5598"
+  integrity sha512-lTEe7ZRCtzuKkn/HYz5DMMbM2irqdHRVbbk6FXhlOgRZILghcwsOyjdzrPbdYcJWDBckjw8KufIcXHGmInIvBw==
   dependencies:
     "@apollo/client" "^3.4.9"
+    "@faker-js/faker" "^10.3.0"
+    compare-versions "^6.1.1"
+    cypress-mailpit "^1.4.0"
     cypress-real-events "^1.11.0"
     graphql "^15.5.0"
     graphql-tag "^2.11.0"
+    yaml "^2.9.1"
 
 "@jahia/eslint-config@^2.1.2":
   version "2.2.0"
@@ -3355,6 +3359,11 @@ cypress-file-upload@^5.0.8:
   version "5.0.8"
   resolved "https://registry.yarnpkg.com/cypress-file-upload/-/cypress-file-upload-5.0.8.tgz#d8824cbeaab798e44be8009769f9a6c9daa1b4a1"
   integrity sha512-+8VzNabRk3zG6x8f8BWArF/xA/W0VK4IZNx3MV0jFWrJS/qKn8eHfa5nU73P9fOQAgwHFJx7zjg4lwOnljMO8g==
+
+cypress-mailpit@^1.4.0:
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/cypress-mailpit/-/cypress-mailpit-1.4.0.tgz#eaf5a42014181cff6b6da1f8e999794e89a8cb05"
+  integrity sha512-Ee7DuY+Fsj95ST2aNuspdkbpdSd5jKj2ESwYTKLpRicDTWTXk2XwpBzILG+SDCFZyToDVeYXlaYWwA4cUyKSuQ==
 
 cypress-multi-reporters@^2.1.0:
   version "2.1.0"
@@ -7446,6 +7455,11 @@ yallist@^5.0.0:
   version "5.0.0"
   resolved "https://registry.yarnpkg.com/yallist/-/yallist-5.0.0.tgz#00e2de443639ed0d78fd87de0d27469fbcffb533"
   integrity sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==
+
+yaml@^2.9.1:
+  version "2.9.1"
+  resolved "https://registry.yarnpkg.com/yaml/-/yaml-2.9.1.tgz#c16233fb31944e705cfefaff38795587f57588ce"
+  integrity sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==
 
 yargs-parser@^18.1.2:
   version "18.1.3"
