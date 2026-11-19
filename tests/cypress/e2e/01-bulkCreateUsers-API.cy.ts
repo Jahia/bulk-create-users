@@ -1,11 +1,8 @@
 import {DocumentNode} from 'graphql';
 
 describe('Bulk Create Users', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
 
-    const TEST_USER_1 = 'bcu-test-user1';
-    const TEST_USER_2 = 'bcu-test-user2';
     const REQUIRED_COLUMNS = ['j:firstName', 'j:lastName'];
     const CSV_VALID = 'j:nodename,j:password,j:firstName,j:lastName\nbcu-test-user1,TestPass1234!,Alice,Smith\nbcu-test-user2,TestPass1234!,Bob,Jones';
     const CSV_WITH_EMAIL = 'j:nodename,j:password,j:firstName,j:lastName,j:email\nbcu-test-user1,TestPass1234!,Alice,Smith,alice@example.com\nbcu-test-user2,TestPass1234!,Bob,Jones,bob@example.com';
@@ -94,7 +91,7 @@ describe('Bulk Create Users', () => {
                 variables: {
                     csvContent: CSV_WITH_EMAIL,
                     separator: ',',
-                    selectedColumns: REQUIRED_COLUMNS  // j:email NOT selected
+                    selectedColumns: REQUIRED_COLUMNS // The j:email column is NOT selected
                 }
             })
                 .its('data.bulkCreateUsers.importUsers')
@@ -143,7 +140,7 @@ describe('Bulk Create Users', () => {
 
         it('accepts groups in [group1],[group2] bracket format', () => {
             deleteTestUsers();
-            // privileged is a built-in global group that always exists
+            // The privileged group is a built-in global group that always exists
             const csvWithGroups = 'j:nodename,j:password,j:firstName,j:lastName,groups\nbcu-test-user1,TestPass1234!,Alice,Smith,[privileged]';
             cy.apollo({
                 mutation: importUsers,
@@ -165,7 +162,7 @@ describe('Bulk Create Users', () => {
             })
                 .its('data.bulkCreateUsers.importUsers')
                 .should(result => {
-                    // user is created even though the group was not found
+                    // The user is created even though the group was not found
                     expect(result.success).to.be.true;
                     expect(result.createdCount).to.eq(1);
                 });
@@ -220,10 +217,10 @@ describe('Bulk Create Users', () => {
         it('continues processing remaining rows when one row is malformed', () => {
             // L3 isolation: a short/invalid row must not abort the whole import.
             deleteTestUsers();
-            const csvWithBadRow = 'j:nodename,j:password,j:firstName,j:lastName\n'
-                + 'bcu-test-user1,TestPass1234!,Alice,Smith\n'
-                + 'truncated-row\n'
-                + 'bcu-test-user2,TestPass1234!,Bob,Jones';
+            const csvWithBadRow = 'j:nodename,j:password,j:firstName,j:lastName\n' +
+                'bcu-test-user1,TestPass1234!,Alice,Smith\n' +
+                'truncated-row\n' +
+                'bcu-test-user2,TestPass1234!,Bob,Jones';
             cy.apollo({
                 mutation: importUsers,
                 variables: {csvContent: csvWithBadRow, separator: ',', selectedColumns: REQUIRED_COLUMNS}
