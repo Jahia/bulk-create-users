@@ -19,13 +19,9 @@ import {createGroup, deleteGroup} from '@jahia/cypress';
  *    from the CSV's groups column - the skip is not a true no-op.
  */
 describe('Bulk Create Users — schema shape and security boundaries', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const schemaIntrospection: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/schemaIntrospection.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const userGroupMembership: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/userGroupMembership.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const userProperty: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/userProperty.graphql');
 
     const REQUIRED_COLUMNS = ['j:firstName', 'j:lastName'];

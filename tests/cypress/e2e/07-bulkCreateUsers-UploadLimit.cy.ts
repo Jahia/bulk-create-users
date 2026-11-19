@@ -18,9 +18,7 @@ import {DocumentNode} from 'graphql';
  * payload than Stage 6 saw.
  */
 describe('Bulk Create Users — upload size limit (F6)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const maxUploadSize: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/maxUploadSize.graphql');
 
     const TEST_USER = 'bcu-test-user1';
