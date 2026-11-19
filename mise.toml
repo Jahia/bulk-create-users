@@ -1,0 +1,5 @@
+[tools]
+# node >= 22.18 is a hard floor: @babel/core 8, in tests/, refuses to install below it.
+# 22 matches the nodeVersion that frontend-maven-plugin uses in pom.xml.
+node = "22"
+yarn = "1"
