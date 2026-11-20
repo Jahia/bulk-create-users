@@ -37,7 +37,6 @@ describe('Bulk Create Users — permission enforcement', () => {
     const IMPORT_CSV = `j:nodename,j:password,j:firstName,j:lastName\n${IMPORTED_USER},BcuImport9Pwd,Imported,User`;
     const REQUIRED_COLUMNS = ['j:firstName', 'j:lastName'];
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
 
     const errorsOf = (result: {graphQLErrors?: Array<{message: string}>; errors?: Array<{message: string}>}) =>
@@ -61,7 +60,7 @@ describe('Bulk Create Users — permission enforcement', () => {
     });
 
     after(() => {
-        cy.apolloClient(); // reset the current Apollo client back to root
+        cy.apolloClient(); // Reset the current Apollo client back to root
         cy.login();
         // See SUPPORT-646 Stage 6: the previous deleteAllUsers (deleteUser.graphql) used a
         // raw JCR mutateNodesByQuery delete, which Jahia rejects for jnt:user nodes

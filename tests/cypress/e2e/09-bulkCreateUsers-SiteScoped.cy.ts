@@ -115,9 +115,7 @@ import {createSite, deleteSite, createUser, deleteUser as deleteUserByName, gran
  * defensive ordering is kept anyway as good hygiene, but is not a complete explanation.
  */
 describe('Bulk Create Users — site-scoped behavior', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const importUsers: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/mutation/importUsers.graphql');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const findUserNodeByQuery: DocumentNode = require('graphql-tag/loader!../fixtures/graphql/query/findUserNodeByQuery.graphql');
 
     // SUPPORT-646: `getUserPath()`/`lookupUser(name, site)` cannot reliably prove a user is
@@ -152,7 +150,7 @@ describe('Bulk Create Users — site-scoped behavior', () => {
 
     before(() => {
         cy.login();
-        // createSite() now correctly persists the site now that this module's own
+        // The createSite() call now correctly persists the site now that this module's own
         // tests/assets/provisioning.yml installs the Digitall bundle set (including
         // dx-base-demo-templates) - see the file-level doc comment above.
         createSite(SITE_KEY);
@@ -166,9 +164,9 @@ describe('Bulk Create Users — site-scoped behavior', () => {
 
     after(() => {
         cy.login();
-        // deleteUserByName(SITE_ADMIN_USER);
-        // deleteUserByName(GLOBAL_ONLY_USER);
-        // deleteSite(SITE_KEY);
+        deleteUserByName(SITE_ADMIN_USER);
+        deleteUserByName(GLOBAL_ONLY_USER);
+        deleteSite(SITE_KEY);
     });
 
     // ─── F8 / F9-SiteScoped: site-scoped creation + site-scoped authorization ────
