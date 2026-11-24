@@ -44,6 +44,7 @@
     "@babel/preset-react": "^7.29.7",
     "@babel/preset-typescript": "^7.29.7",
     "@babel/runtime": "^7.29.14",
+    "@cyclonedx/webpack-plugin": "^5.3.3",
     "@jahia/eslint-config": "^2.2.0",
     "@jahia/webpack-config": "^1.1.0",
     "babel-loader": "^10.1.1",
