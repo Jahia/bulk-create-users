@@ -28,7 +28,7 @@
     "@jahia/moonstone": "^1.5.2",
     "@jahia/ui-extender": "^1.0.3",
     "graphql": "^15.10.3",
-    "i18next": "^19.3.2",
+    "i18next": "^26.3.4",
     "react": "^16.10.2",
     "react-dom": "^16.10.2",
     "react-i18next": "^11.2.2"
